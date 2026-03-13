@@ -18,8 +18,7 @@ import { useTransactionAnalytics } from '../amplitude';
 import { useAppContext } from '../appContext';
 import { useAppSdk } from '../appSdk';
 import { useTranslation } from '../translation';
-import { useActiveAccount } from '../../state/wallet';
-import { isAccountControllable } from '@tonkeeper/core/dist/entries/account';
+import { useActiveStandardTonWallet } from '../../state/wallet';
 
 export type MultiSendFormTokenized = {
     rows: {
@@ -44,7 +43,7 @@ export function useSendMultiTransfer() {
     const { t } = useTranslation();
     const sdk = useAppSdk();
     const { api } = useAppContext();
-    const account = useActiveAccount();
+    const wallet = useActiveStandardTonWallet();
     const client = useQueryClient();
     const track2 = useTransactionAnalytics();
     const { data: jettons } = useJettonList();
@@ -55,16 +54,9 @@ export function useSendMultiTransfer() {
         Error,
         { form: MultiSendFormTokenized; asset: TonAsset; feeEstimation: BigNumber }
     >(async ({ form, asset, feeEstimation }) => {
-        const signer = await getSigner(sdk, account.id, checkTouchId).catch(() => null);
-        const walletId = account.activeTonWallet.id;
+        const signer = await getSigner(sdk, wallet.id, checkTouchId).catch(() => null);
         if (signer === null) return false;
         try {
-            if (!isAccountControllable(account)) {
-                throw new Error("Can't send a transfer using this account");
-            }
-
-            const wallet = account.activeTonWallet;
-
             if (signer.type !== 'cell') {
                 throw new TxConfirmationCustomError(t('ledger_operation_not_supported'));
             }
@@ -97,7 +89,7 @@ export function useSendMultiTransfer() {
         }
 
         await client.invalidateQueries({
-            predicate: query => query.queryKey.includes(walletId)
+            predicate: query => query.queryKey.includes(wallet.id)
         });
         return true;
     });

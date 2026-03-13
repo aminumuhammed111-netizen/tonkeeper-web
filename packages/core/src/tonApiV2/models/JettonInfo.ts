@@ -76,8 +76,6 @@ export interface JettonInfo {
     holdersCount: number;
 }
 
-
-
 /**
  * Check if a given object implements the JettonInfo interface.
  */

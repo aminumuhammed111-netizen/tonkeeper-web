@@ -64,8 +64,6 @@ export interface JettonPreview {
     verification: JettonVerificationType;
 }
 
-
-
 /**
  * Check if a given object implements the JettonPreview interface.
  */

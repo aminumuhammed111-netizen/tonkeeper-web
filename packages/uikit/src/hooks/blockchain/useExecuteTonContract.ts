@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { APIConfig } from '@tonkeeper/core/dist/entries/apis';
 import { CellSigner } from '@tonkeeper/core/dist/entries/signer';
 import { TransferEstimationEvent } from '@tonkeeper/core/dist/entries/send';
-import { Account } from '@tonkeeper/core/dist/entries/account';
+import { StandardTonWalletState } from '@tonkeeper/core/dist/entries/wallet';
 import { Omit } from 'react-beautiful-dnd';
 import { notifyError } from '../../components/transfer/common';
 import { getSigner } from '../../state/mnemonic';
@@ -12,11 +12,11 @@ import { useAppSdk } from '../appSdk';
 import { useTranslation } from '../translation';
 import { TxConfirmationCustomError } from '../../libs/errors/TxConfirmationCustomError';
 import { useCheckTouchId } from '../../state/password';
-import { useActiveAccount, useInvalidateActiveWalletQueries } from '../../state/wallet';
+import { useActiveStandardTonWallet } from '../../state/wallet';
 
 export type ContractExecutorParams = {
     api: APIConfig;
-    account: Account;
+    walletState: StandardTonWalletState;
     signer: CellSigner;
     fee: TransferEstimationEvent;
 };
@@ -34,18 +34,17 @@ export function useExecuteTonContract<Args extends ContractExecutorParams>(
     const { t } = useTranslation();
     const sdk = useAppSdk();
     const { api } = useAppContext();
-    const account = useActiveAccount();
+    const walletState = useActiveStandardTonWallet();
     const client = useQueryClient();
     const track2 = useTransactionAnalytics();
     const { mutateAsync: checkTouchId } = useCheckTouchId();
-    const { mutateAsync: invalidateAccountQueries } = useInvalidateActiveWalletQueries();
 
     return useMutation<boolean, Error>(async () => {
         if (!args.fee) {
             return false;
         }
 
-        const signer = await getSigner(sdk, account.id, checkTouchId).catch(() => null);
+        const signer = await getSigner(sdk, walletState.publicKey, checkTouchId).catch(() => null);
         if (signer?.type !== 'cell') {
             throw new TxConfirmationCustomError(t('ledger_operation_not_supported'));
         }
@@ -56,7 +55,7 @@ export function useExecuteTonContract<Args extends ContractExecutorParams>(
         try {
             await executor({
                 api,
-                account,
+                walletState,
                 signer,
                 ...args
             } as Args);
@@ -64,7 +63,7 @@ export function useExecuteTonContract<Args extends ContractExecutorParams>(
             await notifyError(client, sdk, t, e);
         }
 
-        await invalidateAccountQueries();
+        await client.invalidateQueries([walletState.id]);
         await client.invalidateQueries();
         return true;
     });

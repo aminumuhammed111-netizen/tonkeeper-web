@@ -9,9 +9,9 @@ import { TON_ASSET } from '../entries/crypto/asset/constants';
 import { DashboardCell, DashboardColumn } from '../entries/dashboard';
 import { FiatCurrencies } from '../entries/fiat';
 import { Language, localizationText } from '../entries/language';
-import { ProState, ProStateWallet, ProSubscription, ProSubscriptionInvalid } from '../entries/pro';
+import { ProState, ProSubscription, ProSubscriptionInvalid } from '../entries/pro';
 import { RecipientData, TonRecipientData } from '../entries/send';
-import { isStandardTonWallet, TonWalletStandard, WalletVersion } from '../entries/wallet';
+import { isStandardTonWallet, StandardTonWalletState, WalletVersion } from '../entries/wallet';
 import { AccountsApi } from '../tonApiV2';
 import {
     FiatCurrencies as FiatCurrenciesGenerated,
@@ -31,7 +31,7 @@ import { loginViaTG } from './telegramOauth';
 import { createTonProofItem, tonConnectProofPayload } from './tonConnect/connectService';
 import { getServerTime } from './transfer/common';
 import { walletStateInitFromState } from './wallet/contractService';
-import { accountsStorage } from './accountsStorage';
+import { walletsStorage } from './walletsService';
 
 export const setBackupState = async (storage: IStorage, state: ProSubscription) => {
     await storage.set(AppKey.PRO_BACKUP, state);
@@ -42,14 +42,21 @@ export const getBackupState = async (storage: IStorage) => {
     return backup ?? toEmptySubscription();
 };
 
-export const getProState = async (storage: IStorage): Promise<ProState> => {
+export const getProState = async (
+    storage: IStorage,
+    wallet: StandardTonWalletState
+): Promise<ProState> => {
     try {
-        return await loadProState(storage);
+        return await loadProState(storage, wallet);
     } catch (e) {
         console.error(e);
         return {
             subscription: toEmptySubscription(),
-            authorizedWallet: null
+            hasWalletAuthCookie: false,
+            wallet: {
+                publicKey: wallet.publicKey,
+                rawAddress: wallet.rawAddress
+            }
         };
     }
 };
@@ -79,14 +86,18 @@ export const walletVersionFromProServiceDTO = (value: string) => {
     }
 };
 
-export const loadProState = async (storage: IStorage): Promise<ProState> => {
+export const loadProState = async (
+    storage: IStorage,
+    fallbackWallet: StandardTonWalletState
+): Promise<ProState> => {
     const user = await ProServiceService.proServiceGetUserInfo();
 
-    let authorizedWallet: ProStateWallet | null = null;
+    let wallet = {
+        publicKey: fallbackWallet.publicKey,
+        rawAddress: fallbackWallet.rawAddress
+    };
     if (user.pub_key && user.version) {
-        const wallets = (await accountsStorage(storage).getAccounts()).flatMap(
-            a => a.allTonWallets
-        );
+        const wallets = await walletsStorage(storage).getWallets();
         const actualWallet = wallets
             .filter(isStandardTonWallet)
             .find(
@@ -98,7 +109,7 @@ export const loadProState = async (storage: IStorage): Promise<ProState> => {
         if (!actualWallet) {
             throw new Error('Unknown wallet');
         }
-        authorizedWallet = {
+        wallet = {
             publicKey: actualWallet.publicKey,
             rawAddress: actualWallet.rawAddress
         };
@@ -133,7 +144,8 @@ export const loadProState = async (storage: IStorage): Promise<ProState> => {
     }
     return {
         subscription,
-        authorizedWallet
+        hasWalletAuthCookie: !!user.pub_key,
+        wallet
     };
 };
 
@@ -148,7 +160,7 @@ export const checkAuthCookie = async () => {
 
 export const authViaTonConnect = async (
     api: APIConfig,
-    wallet: TonWalletStandard,
+    wallet: StandardTonWalletState,
     signProof: (bufferToSing: Buffer) => Promise<Uint8Array>
 ) => {
     const domain = 'https://tonkeeper.com/';

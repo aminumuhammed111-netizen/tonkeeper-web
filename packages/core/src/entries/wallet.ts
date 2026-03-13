@@ -1,7 +1,8 @@
 import { Language } from './language';
 import { Network } from './network';
-import { DeprecatedAuthState } from './password';
+import { AuthKeychain, AuthPassword, AuthState, DeprecatedAuthState } from './password';
 import { WalletProxy } from './proxy';
+import { BLOCKCHAIN_NAME } from './crypto';
 
 export enum WalletVersion {
     V3R1 = 0,
@@ -10,29 +11,6 @@ export enum WalletVersion {
     V4R2 = 3,
     V5_BETA = 4,
     V5R1 = 5
-}
-
-export function sortWalletsByVersion(
-    w1: { version: WalletVersion },
-    w2: { version: WalletVersion }
-) {
-    if (w1.version < w2.version) {
-        return 1;
-    }
-    if (w1.version > w2.version) {
-        return -1;
-    }
-    return 0;
-}
-
-export function sortDerivationsByIndex(w1: { index: number }, w2: { index: number }) {
-    if (w1.index < w2.index) {
-        return -1;
-    }
-    if (w1.index > w2.index) {
-        return 1;
-    }
-    return 0;
 }
 
 export const isW5Version = (version: WalletVersion) => {
@@ -46,8 +24,6 @@ export const WalletVersions = [
     WalletVersion.V5_BETA,
     WalletVersion.V5R1
 ];
-
-export const backwardCompatibilityOnlyWalletVersions = [WalletVersion.V5_BETA];
 
 export const walletVersionText = (version: WalletVersion) => {
     switch (version) {
@@ -91,7 +67,7 @@ export interface DeprecatedWalletState {
     auth?: DeprecatedAuthState;
 
     name?: string;
-    emoji?: string;
+    emoji: string;
 
     revision: number;
 
@@ -111,28 +87,61 @@ export interface DeprecatedWalletState {
 
 export type WalletId = string;
 
-export type TonContract = {
+export interface WalletBasic {
+    blockchain: BLOCKCHAIN_NAME;
     id: WalletId;
-    rawAddress: string; // rawAddress
-};
-
-export type TonWalletStandard = TonContract & {
-    publicKey: string;
-    version: WalletVersion;
-};
-
-export type DerivationItem = {
-    index: number;
-    activeTonWalletId: WalletId;
-    tonWallets: TonWalletStandard[];
-    //  tronWallets: never;
-};
-
-export function isStandardTonWallet(wallet: TonContract): wallet is TonWalletStandard {
-    return 'version' in wallet && 'publicKey' in wallet;
 }
 
-export interface TonWalletConfig {
+export interface TonWalletStateBasic extends WalletBasic {
+    blockchain: BLOCKCHAIN_NAME.TON;
+    rawAddress: string;
+    name: string;
+    emoji: string;
+    network: Network;
+}
+
+export interface StandardTonWalletState extends TonWalletStateBasic {
+    type: 'standard';
+    publicKey: string;
+    version: WalletVersion;
+    auth: AuthState;
+}
+
+export interface MultisigTonWalletState extends TonWalletStateBasic {
+    type: 'multisig';
+}
+
+export type TonWalletState = StandardTonWalletState | MultisigTonWalletState;
+
+export type WalletState = TonWalletState;
+export type WalletsState = WalletState[];
+
+export const defaultWalletsState = [];
+
+export function isTonWallet(state: WalletState): state is TonWalletState {
+    return state.blockchain === BLOCKCHAIN_NAME.TON;
+}
+
+export function isStandardTonWallet(state: WalletState): state is StandardTonWalletState {
+    return state.blockchain === BLOCKCHAIN_NAME.TON && state.type === 'standard';
+}
+
+export function isPasswordAuthWallet(
+    state: WalletState
+): state is WalletState & { auth: AuthPassword } {
+    return isStandardTonWallet(state) && state.auth.kind === 'password';
+}
+
+export function isMnemonicAuthWallet(
+    state: WalletState
+): state is WalletState & { auth: AuthPassword | AuthKeychain } {
+    return (
+        isStandardTonWallet(state) &&
+        (state.auth.kind === 'password' || state.auth.kind === 'keychain')
+    );
+}
+
+export interface ActiveWalletConfig {
     pinnedTokens: string[];
     hiddenTokens: string[];
     pinnedNfts: string[];
@@ -140,15 +149,6 @@ export interface TonWalletConfig {
     trustedNfts: string[];
     spamNfts: string[];
 }
-
-export const defaultPreferencesConfig: TonWalletConfig = {
-    pinnedTokens: [],
-    hiddenTokens: [],
-    pinnedNfts: [],
-    hiddenNfts: [],
-    trustedNfts: [],
-    spamNfts: []
-};
 
 export interface TronWalletStorage {
     ownerWalletAddress: string;

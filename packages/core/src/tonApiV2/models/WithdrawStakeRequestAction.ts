@@ -58,8 +58,6 @@ export interface WithdrawStakeRequestAction {
     implementation: PoolImplementationType;
 }
 
-
-
 /**
  * Check if a given object implements the WithdrawStakeRequestAction interface.
  */

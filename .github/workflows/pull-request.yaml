@@ -1,41 +1,15 @@
-name: Tonkeeper Pull-Request
+name: Tonkeeper Pull-Request Distributives
 on:
     workflow_dispatch:
     pull_request:
-
-env:
-    node-version: 20.11.1
 
 jobs:
     desktop-build:
         name: desktop-build
         strategy:
             matrix:
-                include:
-                    - os: ubuntu-latest
-                      command: make:intel
-                      tag: x64
-                      dist: /apps/desktop/out/make/deb/x64
-                    - os: ubuntu-latest
-                      command: make:arm
-                      tag: arm64
-                      dist: /apps/desktop/out/make/deb/arm64
-                    - os: windows-latest
-                      command: make:intel
-                      tag: x64
-                      dist: /apps/desktop/out/make/squirrel.windows/x64/*Setup.exe
-                    - os: macos-13
-                      command: make:intel
-                      tag: x64
-                      dist: /apps/desktop/out/make
-                    - os: macos-13
-                      command: make:arm
-                      tag: arm
-                      dist: /apps/desktop/out/make
-                    - os: macos-13
-                      command: make:universal
-                      tag: universal
-                      dist: /apps/desktop/out/make
+                os: [ubuntu-latest, macos-13, windows-latest]
+                node-version: [20.11.1]
 
         runs-on: ${{ matrix.os }}
         timeout-minutes: 30
@@ -59,7 +33,7 @@ jobs:
             - name: Set up Node
               uses: actions/setup-node@v4
               with:
-                  node-version: ${{ env.node-version }}
+                  node-version: ${{ matrix.node-version }}
 
             - name: Enable Corepack
               run: |
@@ -74,7 +48,7 @@ jobs:
 
             - name: Configure keychain
               if: runner.os == 'macOS'
-              uses: apple-actions/import-codesign-certs@v3
+              uses: apple-actions/import-codesign-certs@v2
               with:
                   p12-file-base64: ${{ secrets.IDENTITY_P12_B64 }}
                   p12-password: ${{ secrets.IDENTITY_PASSPHRASE }}
@@ -92,7 +66,21 @@ jobs:
             - name: Run build intel distributive
               uses: borales/actions-yarn@v5
               with:
-                  cmd: ${{ matrix.command }}
+                  cmd: make:intel
+                  dir: 'apps/desktop'
+
+            - name: Run build arm distributive
+              if: runner.os != 'Windows'
+              uses: borales/actions-yarn@v5
+              with:
+                  cmd: make:arm
+                  dir: 'apps/desktop'
+
+            - name: Run build universal distributive
+              if: runner.os == 'macOS'
+              uses: borales/actions-yarn@v5
+              with:
+                  cmd: make:universal
                   dir: 'apps/desktop'
 
             - name: Upload zip distributives to artifacts
@@ -106,11 +94,39 @@ jobs:
 
             - name: Upload distributives to artifacts
               uses: actions/upload-artifact@v4
+              if: runner.os == 'macOS'
               with:
-                  name: Tonkeeper Desktop ${{ runner.os }} ${{ matrix.tag }}
+                  name: Tonkeeper Desktop ${{ runner.os }}
                   retention-days: 10
                   path: |
-                      ${{ github.workspace }}${{ matrix.dist }}
+                      ${{ github.workspace }}/apps/desktop/out/make
+
+            - name: Upload distributives to artifacts
+              uses: actions/upload-artifact@v4
+              if: runner.os == 'Windows'
+              with:
+                  name: Tonkeeper Desktop ${{ runner.os }} x64
+                  retention-days: 10
+                  path: |
+                      ${{ github.workspace }}/apps/desktop/out/make/squirrel.windows/x64/*Setup.exe
+
+            - name: Upload distributives to artifacts
+              uses: actions/upload-artifact@v4
+              if: runner.os == 'Linux'
+              with:
+                  name: Tonkeeper Desktop ${{ runner.os }} x64
+                  retention-days: 10
+                  path: |
+                      ${{ github.workspace }}/apps/desktop/out/make/deb/x64
+
+            - name: Upload distributives to artifacts
+              uses: actions/upload-artifact@v4
+              if: runner.os == 'Linux'
+              with:
+                  name: Tonkeeper Desktop ${{ runner.os }} arm64
+                  retention-days: 10
+                  path: |
+                      ${{ github.workspace }}/apps/desktop/out/make/deb/arm64
 
             - name: Clean-up credentials
               if: always() && runner.os == 'macOS'
@@ -129,7 +145,7 @@ jobs:
             - name: Set up Node
               uses: actions/setup-node@v4
               with:
-                  node-version: ${{ env.node-version }}
+                  node-version: 20.11.1
 
             - name: Enable Corepack
               run: |
@@ -147,7 +163,7 @@ jobs:
                   VITE_APP_MEASUREMENT_ID: ${{ secrets.REACT_APP_MEASUREMENT_ID }}
                   VITE_APP_APTABASE: ${{ secrets.VITE_APP_APTABASE }}
                   VITE_APP_APTABASE_HOST: https://anonymous-analytics.tonkeeper.com
-                  VITE_APP_LOCALES: en,zh_CN,ru,it,tr,bg
+                  VITE_APP_LOCALES: en,zh_CN,ru,it,tr
               with:
                   cmd: build:web
 
@@ -172,7 +188,7 @@ jobs:
             - name: Set up Node
               uses: actions/setup-node@v4
               with:
-                  node-version: ${{ env.node-version }}
+                  node-version: 20.11.1
 
             - name: Enable Corepack
               run: |

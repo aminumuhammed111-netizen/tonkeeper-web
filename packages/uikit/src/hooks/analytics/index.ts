@@ -1,23 +1,21 @@
 import {
     isStandardTonWallet,
-    walletVersionText,
-    TonContract
+    WalletsState,
+    WalletState,
+    walletVersionText
 } from '@tonkeeper/core/dist/entries/wallet';
-import { Account } from '@tonkeeper/core/dist/entries/account';
-import { Network } from '@tonkeeper/core/dist/entries/network';
 
 export interface Analytics {
     pageView: (location: string) => void;
 
-    init: (params: {
-        application: string;
-        walletType: string;
-        activeAccount: Account;
-        accounts: Account[];
-        network?: Network;
-        version?: string;
-        platform?: string;
-    }) => void;
+    init: (
+        application: string,
+        walletType: string,
+        activeWallet?: WalletState,
+        wallets?: WalletsState,
+        version?: string,
+        platform?: string
+    ) => void;
     track: (name: string, params: Record<string, any>) => Promise<void>;
 }
 
@@ -32,16 +30,17 @@ export class AnalyticsGroup implements Analytics {
         this.analytics.forEach(c => c.pageView(location));
     }
 
-    init(params: {
-        application: string;
-        walletType: string;
-        activeAccount: Account;
-        accounts: Account[];
-        network?: Network;
-        version?: string;
-        platform?: string;
-    }) {
-        this.analytics.forEach(c => c.init(params));
+    init(
+        application: string,
+        walletType: string,
+        activeWallet?: WalletState,
+        wallets?: WalletsState,
+        version?: string,
+        platform?: string
+    ) {
+        this.analytics.forEach(c =>
+            c.init(application, walletType, activeWallet, wallets, version, platform)
+        );
     }
 
     async track(name: string, params: Record<string, any>) {
@@ -49,10 +48,10 @@ export class AnalyticsGroup implements Analytics {
     }
 }
 
-export const toWalletType = (wallet?: TonContract | null): string => {
+export const toWalletType = (wallet?: WalletState | null): string => {
     if (!wallet) return 'new-user';
     if (!isStandardTonWallet(wallet)) {
-        return 'unknown-contract';
+        return 'multisend';
     }
     return walletVersionText(wallet.version);
 };

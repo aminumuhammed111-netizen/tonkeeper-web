@@ -195,7 +195,7 @@ import {
  */
 export interface BlockchainConfig {
     /**
-     * config boc in hex format
+     * config boc in base64 format
      * @type {string}
      * @memberof BlockchainConfig
      */

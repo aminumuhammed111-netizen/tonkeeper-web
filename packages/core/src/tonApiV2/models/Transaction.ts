@@ -226,8 +226,6 @@ export interface Transaction {
     raw: string;
 }
 
-
-
 /**
  * Check if a given object implements the Transaction interface.
  */

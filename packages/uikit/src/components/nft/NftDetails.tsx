@@ -7,12 +7,12 @@ import { useAppContext } from '../../hooks/appContext';
 import { useAppSdk } from '../../hooks/appSdk';
 import { useDateFormat } from '../../hooks/dateFormat';
 import { useTranslation } from '../../hooks/translation';
-import { useActiveTonNetwork, useActiveWallet } from '../../state/wallet';
+import { useActiveWallet } from '../../state/wallet';
 import { SpinnerIcon } from '../Icon';
 import { ListBlock, ListItem, ListItemPayload } from '../List';
 import { Body1, H3, Label1 } from '../Text';
 import { NFTKind } from './NftAction';
-import { useNftDNSExpirationDate, useNftItemData } from '../../state/nft';
+import { useNftDNSExpirationDate, useNftItemData } from "../../state/nft";
 
 const Block = styled.div`
     width: 100%;
@@ -35,6 +35,7 @@ const RightText = styled(Body1)`
 `;
 
 export const NftDetails: FC<{ nftItem: NftItem; kind: NFTKind }> = React.memo(({ nftItem }) => {
+    const wallet = useActiveWallet();
     const { t } = useTranslation();
     const { data } = useNftItemData(nftItem.address);
     const { data: expirationDate, isLoading: isExpirationDateLoading } =
@@ -52,9 +53,8 @@ export const NftDetails: FC<{ nftItem: NftItem; kind: NFTKind }> = React.memo(({
     const owner = item.owner?.address;
     const address = Address.parse(item.address).toString();
 
-    const network = useActiveTonNetwork();
     const url = config.NFTOnExplorerUrl ?? 'https://tonviewer.com/nft/%s';
-    const nftAddress = formatAddress(address, network, true);
+    const nftAddress = formatAddress(address, wallet.network, true);
 
     return (
         <Block>
@@ -66,10 +66,12 @@ export const NftDetails: FC<{ nftItem: NftItem; kind: NFTKind }> = React.memo(({
             </Row>
             <ListBlock margin={false}>
                 {owner && (
-                    <ListItem onClick={() => sdk.copyToClipboard(formatAddress(owner, network))}>
+                    <ListItem
+                        onClick={() => sdk.copyToClipboard(formatAddress(owner, wallet.network))}
+                    >
                         <ListItemPayload>
                             <RightText>{t('nft_owner_address')}</RightText>
-                            <Label1>{toShortValue(formatAddress(owner, network))}</Label1>
+                            <Label1>{toShortValue(formatAddress(owner, wallet.network))}</Label1>
                         </ListItemPayload>
                     </ListItem>
                 )}

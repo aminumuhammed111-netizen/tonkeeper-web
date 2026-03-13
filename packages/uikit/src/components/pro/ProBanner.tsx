@@ -6,7 +6,8 @@ import { useProState } from '../../state/pro';
 import { useDateTimeFormat } from '../../hooks/useDateTimeFormat';
 import { useTranslation } from '../../hooks/translation';
 import { isPaidSubscription, isTrialSubscription } from '@tonkeeper/core/dist/entries/pro';
-import { useProFeaturesNotification } from '../modals/ProFeaturesNotificationControlled';
+import { ProFeaturesNotification } from '../desktop/pro/ProFeaturesNotification';
+import { useDisclosure } from '../../hooks/useDisclosure';
 
 const ProBannerStyled = styled.div`
     background: ${p => p.theme.backgroundContent};
@@ -35,7 +36,7 @@ const Label2Styled = styled(Label2)`
 `;
 
 export const ProBanner: FC<{ className?: string }> = ({ className }) => {
-    const { onOpen } = useProFeaturesNotification();
+    const { isOpen, onClose, onOpen } = useDisclosure();
     const { t } = useTranslation();
     const formatDate = useDateTimeFormat();
     const { data } = useProState();
@@ -74,6 +75,7 @@ export const ProBanner: FC<{ className?: string }> = ({ className }) => {
                     {t('about_tonkeeper_pro')}
                 </Button>
             </ButtonsContainerStyled>
+            <ProFeaturesNotification isOpen={isOpen} onClose={onClose} />
         </ProBannerStyled>
     );
 };

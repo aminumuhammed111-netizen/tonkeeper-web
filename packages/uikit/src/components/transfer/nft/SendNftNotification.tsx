@@ -118,13 +118,15 @@ const SendContent: FC<{ nftItem: NftItem; onClose: () => void }> = ({ nftItem, o
                                 onClose={onClose}
                                 recipient={recipient!}
                                 nftItem={nftItem}
-                                mainButton={<ConfirmViewButtons MainButton={ConfirmMainButton} />}
-                                headerBlock={
+                                MainButton={() => (
+                                    <ConfirmViewButtons MainButton={ConfirmMainButton} />
+                                )}
+                                HeaderBlock={() => (
                                     <ConfirmHeaderBlock
                                         onBack={backToRecipient}
                                         onClose={onClose}
                                     />
-                                }
+                                )}
                             />
                         )}
                     </div>

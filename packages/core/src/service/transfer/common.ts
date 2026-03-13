@@ -5,21 +5,20 @@ import {
     comment,
     external,
     internal,
-    loadStateInit,
     storeMessage,
     toNano
 } from '@ton/core';
-import { Maybe } from '@ton/core/dist/utils/maybe';
 import { sign } from '@ton/crypto';
 import BigNumber from 'bignumber.js';
 import nacl from 'tweetnacl';
 import { APIConfig } from '../../entries/apis';
 import { TonRecipient, TransferEstimationEvent } from '../../entries/send';
 import { BaseSigner } from '../../entries/signer';
-import { TonWalletStandard } from '../../entries/wallet';
-import { NotEnoughBalanceError } from '../../errors/NotEnoughBalanceError';
+import { StandardTonWalletState } from '../../entries/wallet';
 import { Account, AccountsApi, LiteServerApi, WalletApi } from '../../tonApiV2';
-import { WalletContract, walletContractFromState } from '../wallet/contractService';
+import { walletContractFromState } from '../wallet/contractService';
+import { NotEnoughBalanceError } from '../../errors/NotEnoughBalanceError';
+import { WalletContract } from '../wallet/contractService';
 
 export enum SendMode {
     CARRY_ALL_REMAINING_BALANCE = 128,
@@ -29,21 +28,6 @@ export enum SendMode {
     IGNORE_ERRORS = 2,
     NONE = 0
 }
-
-export type StateInit = ReturnType<typeof toStateInit>;
-
-export const toStateInit = (
-    stateInit?: string
-): { code: Maybe<Cell>; data: Maybe<Cell> } | undefined => {
-    if (!stateInit) {
-        return undefined;
-    }
-    const { code, data } = loadStateInit(Cell.fromBase64(stateInit).asSlice());
-    return {
-        code,
-        data
-    };
-};
 
 export const externalMessage = (contract: WalletContract, seqno: number, body: Cell) => {
     return beginCell()
@@ -93,7 +77,7 @@ export const getWalletSeqNo = async (api: APIConfig, accountId: string) => {
     return seqno;
 };
 
-export const getWalletBalance = async (api: APIConfig, walletState: TonWalletStandard) => {
+export const getWalletBalance = async (api: APIConfig, walletState: StandardTonWalletState) => {
     const wallet = await new AccountsApi(api.tonApiV2).getAccount({
         accountId: walletState.rawAddress
     });
@@ -114,7 +98,7 @@ export const seeIfTimeError = (e: unknown): e is Error => {
 export const createTransferMessage = async (
     wallet: {
         seqno: number;
-        state: TonWalletStandard;
+        state: StandardTonWalletState;
         signer: BaseSigner;
         timestamp: number;
     },
@@ -153,7 +137,7 @@ signEstimateMessage.type = 'cell' as const;
 
 export async function getKeyPairAndSeqno(options: {
     api: APIConfig;
-    walletState: TonWalletStandard;
+    walletState: StandardTonWalletState;
     fee: TransferEstimationEvent;
     amount: BigNumber;
 }) {

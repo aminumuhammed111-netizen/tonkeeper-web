@@ -1,5 +1,4 @@
 import styled from 'styled-components';
-import { hexToRGBA } from '../../libs/css';
 
 export const AsideMenuItem = styled.button<{ isSelected: boolean }>`
     background: ${p => (p.isSelected ? p.theme.backgroundContentTint : p.theme.backgroundContent)};
@@ -22,6 +21,6 @@ export const AsideMenuItem = styled.button<{ isSelected: boolean }>`
     transition: background-color 0.15s ease-in-out;
 
     &:hover {
-        background: ${p => hexToRGBA(p.theme.backgroundContentTint, 0.56)};
+        background: ${p => p.theme.backgroundContentTint};
     }
 `;

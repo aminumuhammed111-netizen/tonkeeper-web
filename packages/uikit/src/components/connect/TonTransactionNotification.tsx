@@ -7,15 +7,17 @@ import {
     sendTonConnectTransfer,
     tonConnectTransferError
 } from '@tonkeeper/core/dist/service/transfer/tonService';
-import { FC, useCallback, useEffect } from 'react';
+import { formatAddress, toShortValue } from '@tonkeeper/core/dist/utils/common';
+import { FC, useCallback, useEffect, useState } from 'react';
 import styled, { css } from 'styled-components';
 import { useAppContext } from '../../hooks/appContext';
 import { useAppSdk } from '../../hooks/appSdk';
 import { useTranslation } from '../../hooks/translation';
-import { anyOfKeysParts, QueryKey } from '../../libs/queryKey';
+import { TxConfirmationCustomError } from '../../libs/errors/TxConfirmationCustomError';
+import { QueryKey } from '../../libs/queryKey';
 import { getSigner } from '../../state/mnemonic';
 import { useCheckTouchId } from '../../state/password';
-import { CheckmarkCircleIcon, ErrorIcon, ExclamationMarkCircleIcon } from '../Icon';
+import { CheckmarkCircleIcon, ErrorIcon } from '../Icon';
 import {
     Notification,
     NotificationBlock,
@@ -26,14 +28,12 @@ import {
     NotificationTitleRow
 } from '../Notification';
 import { SkeletonListWithImages } from '../Skeleton';
-import { H2, Label2, Label3 } from '../Text';
+import { Body2, H2, Label2 } from '../Text';
 import { Button } from '../fields/Button';
+import { WalletEmoji } from '../shared/emoji/WalletEmoji';
 import { ResultButton } from '../transfer/common';
 import { EmulationList } from './EstimationLayout';
-import { useActiveStandardTonWallet, useAccountsState, useActiveAccount } from '../../state/wallet';
-import { LedgerError } from '@tonkeeper/core/dist/errors/LedgerError';
-import { AccountAndWalletInfo } from '../account/AccountAndWalletInfo';
-import { isAccountControllable } from '@tonkeeper/core/dist/entries/account';
+import { useActiveStandardTonWallet, useActiveWallet, useWalletsState } from '../../state/wallet';
 
 const ButtonGap = styled.div`
     ${props =>
@@ -57,24 +57,30 @@ const ButtonRowStyled = styled.div`
 `;
 
 const useSendMutation = (params: TonConnectTransactionPayload, waitInvalidation?: boolean) => {
-    const account = useActiveAccount();
+    const wallet = useActiveStandardTonWallet();
     const sdk = useAppSdk();
     const { api } = useAppContext();
     const client = useQueryClient();
+    const { t } = useTranslation();
     const { mutateAsync: checkTouchId } = useCheckTouchId();
 
     return useMutation<string, Error>(async () => {
-        if (!isAccountControllable(account)) {
-            throw new Error("Can't estimate when account is not controllable");
+        const signer = await getSigner(sdk, wallet.id, checkTouchId);
+
+        let boc: string;
+        switch (signer.type) {
+            case 'cell': {
+                boc = await sendTonConnectTransfer(api, wallet, params, signer);
+                break;
+            }
+            default: {
+                throw new TxConfirmationCustomError(t('ledger_operation_not_supported'));
+            }
         }
 
-        const signer = await getSigner(sdk, account.id, checkTouchId);
-
-        const boc = await sendTonConnectTransfer(api, account, params, signer);
-
-        const invalidationPromise = client.invalidateQueries(
-            anyOfKeysParts(account.id, account.activeTonWallet.id)
-        );
+        const invalidationPromise = client.invalidateQueries({
+            predicate: query => query.queryKey.includes(wallet.rawAddress)
+        });
         if (waitInvalidation) {
             await invalidationPromise;
         }
@@ -118,15 +124,6 @@ const Header = styled(H2)`
     text-align: center;
 `;
 
-const ExclamationMarkCircleIconStyled = styled(ExclamationMarkCircleIcon)`
-    min-width: 32px;
-    min-height: 32px;
-`;
-
-const ResultButtonErrored = styled(ResultButton)`
-    height: fit-content;
-`;
-
 const NotificationIssue: FC<{
     kind: 'not-enough-balance';
     handleClose: (result?: string) => void;
@@ -160,17 +157,13 @@ const ConnectContent: FC<{
     waitInvalidation?: boolean;
 }> = ({ params, handleClose, waitInvalidation }) => {
     const sdk = useAppSdk();
+    const [done, setDone] = useState(false);
 
     const { t } = useTranslation();
 
     const { data: issues, isFetched } = useTransactionError(params);
     const { data: estimate, isLoading: isEstimating, isError } = useEstimation(params, isFetched);
-    const {
-        mutateAsync,
-        isLoading,
-        error: sendError,
-        data: sendResult
-    } = useSendMutation(params, waitInvalidation);
+    const { mutateAsync, isLoading } = useSendMutation(params, waitInvalidation);
 
     useEffect(() => {
         if (sdk.twaExpand) {
@@ -182,10 +175,10 @@ const ConnectContent: FC<{
     const onSubmit = async () => {
         try {
             const result = await mutateAsync();
+            setDone(true);
             sdk.hapticNotification('success');
             setTimeout(() => handleClose(result), 300);
         } catch (e) {
-            setTimeout(() => handleClose(), 3000);
             console.error(e);
         }
     };
@@ -198,27 +191,19 @@ const ConnectContent: FC<{
         return <NotificationSkeleton handleClose={handleClose} />;
     }
 
-    const done = sendResult !== undefined;
-    const shouldUpdateLedger = sendError && sendError instanceof LedgerError;
-
     return (
         <NotificationBlock>
             <EmulationList isError={isError} estimate={estimate} />
             <ButtonGap />
             <NotificationFooterPortal>
                 <NotificationFooter>
-                    {sendError ? (
-                        <ResultButtonErrored>
-                            <ExclamationMarkCircleIconStyled />
-                            <Label2>{t('error_occurred')}</Label2>
-                            {shouldUpdateLedger && <Label3>{t('update_ledger_error')}</Label3>}
-                        </ResultButtonErrored>
-                    ) : done ? (
+                    {done && (
                         <ResultButton done>
                             <CheckmarkCircleIcon />
                             <Label2>{t('ton_login_success')}</Label2>
                         </ResultButton>
-                    ) : (
+                    )}
+                    {!done && (
                         <ButtonRowStyled>
                             <Button
                                 size="large"
@@ -249,15 +234,12 @@ const ConnectContent: FC<{
 
 const useEstimation = (params: TonConnectTransactionPayload, errorFetched: boolean) => {
     const { api } = useAppContext();
-    const account = useActiveAccount();
+    const wallet = useActiveStandardTonWallet();
 
     return useQuery<EstimateData, Error>(
         [QueryKey.estimate, params],
         async () => {
-            if (!isAccountControllable(account)) {
-                throw new Error("Can't estimate when account is not controllable");
-            }
-            const accountEvent = await estimateTonConnectTransfer(api, account, params);
+            const accountEvent = await estimateTonConnectTransfer(api, wallet, params);
             return { accountEvent };
         },
         { enabled: errorFetched }
@@ -277,7 +259,20 @@ const NotificationTitleRowStyled = styled(NotificationTitleRow)`
     align-items: flex-start;
 `;
 
+const WalletInfoStyled = styled.div`
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: ${p => p.theme.textSecondary};
+
+    > ${Body2} {
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+`;
+
 const NotificationTitleWithWalletName: FC<{ onClose: () => void }> = ({ onClose }) => {
+    const wallet = useActiveWallet();
     const { t } = useTranslation();
 
     return (
@@ -286,7 +281,17 @@ const NotificationTitleWithWalletName: FC<{ onClose: () => void }> = ({ onClose 
                 <NotificationTitleRowStyled handleClose={onClose}>
                     <div>
                         {t('txActions_signRaw_title')}
-                        <AccountAndWalletInfo />
+                        <WalletInfoStyled>
+                            <Body2>
+                                {t('confirmSendModal_wallet')}&nbsp;
+                                {wallet.name ?? toShortValue(formatAddress(wallet.rawAddress))}
+                            </Body2>
+                            <WalletEmoji
+                                emojiSize="20px"
+                                containerSize="20px"
+                                emoji={wallet.emoji}
+                            />
+                        </WalletInfoStyled>
                     </div>
                 </NotificationTitleRowStyled>
             </NotificationHeader>
@@ -300,7 +305,7 @@ export const TonTransactionNotification: FC<{
     waitInvalidation?: boolean;
 }> = ({ params, handleClose, waitInvalidation }) => {
     const { t } = useTranslation();
-    const wallets = useAccountsState();
+    const wallets = useWalletsState();
     const Content = useCallback(() => {
         if (!params) return undefined;
         return (
@@ -310,7 +315,7 @@ export const TonTransactionNotification: FC<{
                 )}
                 <ConnectContent
                     params={params}
-                    handleClose={boc => (params != null ? handleClose(boc) : undefined)}
+                    handleClose={handleClose}
                     waitInvalidation={waitInvalidation}
                 />
             </>

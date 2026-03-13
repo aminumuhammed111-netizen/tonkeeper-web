@@ -1,4 +1,5 @@
 import { QueryClient, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Address } from '@ton/core';
 import { CryptoCurrency } from '@tonkeeper/core/dist/entries/crypto';
 import { FiatCurrencies } from '@tonkeeper/core/dist/entries/fiat';
 import { RatesApi, TokenRates } from '@tonkeeper/core/dist/tonApiV2';
@@ -110,9 +111,9 @@ export const useFormatFiat = (rate: TokenRate | undefined, tokenAmount: BigNumbe
 };
 
 export const tokenRate = (client: QueryClient, fiat: FiatCurrencies, token: string) => {
-    const key = getRateKey(fiat, token);
-
-    return client.getQueryCache().find(key)?.state.data as TokenRate | undefined;
+    return client.getQueryCache().find(getRateKey(fiat, token))?.state.data as
+        | TokenRate
+        | undefined;
 };
 
 export const getTonFiatAmount = (client: QueryClient, fiat: FiatCurrencies, assets: AssetData) => {
@@ -125,12 +126,18 @@ export const getTonFiatAmount = (client: QueryClient, fiat: FiatCurrencies, asse
     return shiftedDecimals(assets.ton.info.balance).multipliedBy(rate.prices);
 };
 
-export const getJettonsFiatAmount = (fiat: FiatCurrencies, assets: AssetData) => {
-    return assets.ton.jettons.balances.reduce((total, { jetton, balance, price }) => {
-        const rate = price ? toTokenRate(price, fiat) : undefined;
+export const getJettonsFiatAmount = (
+    client: QueryClient,
+    fiat: FiatCurrencies,
+    assets: AssetData
+) => {
+    return assets.ton.jettons.balances.reduce((total, { jetton, balance }) => {
+        const rate = tokenRate(client, fiat, Address.parse(jetton.address).toString());
+
         if (!rate) {
             return total;
         }
+
         return total.plus(shiftedDecimals(balance, jetton.decimals).multipliedBy(rate.prices));
     }, new BigNumber(0));
 };

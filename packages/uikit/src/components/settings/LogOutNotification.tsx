@@ -1,18 +1,19 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { Account, AccountId } from '@tonkeeper/core/dist/entries/account';
+import { isStandardTonWallet, TonWalletState, WalletId } from '@tonkeeper/core/dist/entries/wallet';
 import { FC, useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import { useTranslation } from '../../hooks/translation';
 import { AppRoute, SettingsRoute } from '../../libs/routes';
-import { useMutateDeleteAll, useMutateLogOut } from '../../state/wallet';
+import { useMutateDeleteAll } from '../../state/wallet';
+import { useMutateLogOut } from '../../state/wallet';
 import { Notification } from '../Notification';
 import { Body1, H2, Label1, Label2 } from '../Text';
 import { Button } from '../fields/Button';
 import { Checkbox } from '../fields/Checkbox';
 import { DisclaimerBlock } from '../home/BuyItemNotification';
 
-const NotificationBlock = styled.div`
+const NotificationBlock = styled.form`
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -35,19 +36,103 @@ const DisclaimerLink = styled(Label1)`
     margin-left: 2.35rem;
 `;
 
-const DeleteContent: FC<{
+const LotOutContent: FC<{
     onClose: (action: () => void) => void;
-    accountId: AccountId;
+    walletId: WalletId;
     isKeystone: boolean;
-    isReadOnly: boolean;
-}> = ({ onClose, accountId, isKeystone, isReadOnly }) => {
+}> = ({ onClose, walletId, isKeystone }) => {
     const navigate = useNavigate();
     const { t } = useTranslation();
-    const [checked, setChecked] = useState(isKeystone || isReadOnly);
+    const [checked, setChecked] = useState(false);
+    const { mutateAsync, isLoading } = useMutateLogOut();
+
+    return (
+        <NotificationBlock>
+            <TextBlock>
+                <H2>{t('settings_reset_alert_title')}</H2>
+                <BodyText>
+                    {t(
+                        isKeystone
+                            ? 'Delete_keystone_wallet_data_description'
+                            : 'settings_reset_alert_caption'
+                    )}
+                </BodyText>
+            </TextBlock>
+
+            {!isKeystone && (
+                <DisclaimerBlock>
+                    <DisclaimerText>
+                        <Checkbox checked={checked} onChange={setChecked}>
+                            {t('I_have_a_backup_copy_of_recovery_phrase')}
+                        </Checkbox>
+                    </DisclaimerText>
+                    <DisclaimerLink
+                        onClick={() =>
+                            onClose(() =>
+                                navigate(
+                                    AppRoute.settings + SettingsRoute.recovery + '/' + walletId
+                                )
+                            )
+                        }
+                    >
+                        {t('Back_up_now')}
+                    </DisclaimerLink>
+                </DisclaimerBlock>
+            )}
+            {isKeystone && <div style={{ height: 16 }} />}
+            <Button
+                disabled={!checked && !isKeystone}
+                size="large"
+                fullWidth
+                loading={isLoading}
+                onClick={async () => {
+                    await mutateAsync(walletId);
+                    onClose(() => navigate(AppRoute.home));
+                }}
+            >
+                {t('settings_reset')}
+            </Button>
+        </NotificationBlock>
+    );
+};
+
+export const LogOutWalletNotification: FC<{
+    wallet?: TonWalletState;
+    handleClose: () => void;
+}> = ({ wallet, handleClose }) => {
+    const Content = useCallback(
+        (afterClose: (action: () => void) => void) => {
+            if (!wallet) return undefined;
+            return (
+                <LotOutContent
+                    walletId={wallet?.id}
+                    onClose={afterClose}
+                    isKeystone={isStandardTonWallet(wallet) && wallet.auth.kind === 'keystone'}
+                />
+            );
+        },
+        [wallet]
+    );
+
+    return (
+        <Notification isOpen={wallet != null} handleClose={handleClose}>
+            {Content}
+        </Notification>
+    );
+};
+
+const DeleteContent: FC<{
+    onClose: (action: () => void) => void;
+    walletId: WalletId;
+    isKeystone: boolean;
+}> = ({ onClose, walletId, isKeystone }) => {
+    const navigate = useNavigate();
+    const { t } = useTranslation();
+    const [checked, setChecked] = useState(false);
     const { mutateAsync, isLoading } = useMutateLogOut();
 
     const onDelete = async () => {
-        await mutateAsync(accountId);
+        await mutateAsync(walletId);
         onClose(() => navigate(AppRoute.home));
     };
 
@@ -63,7 +148,8 @@ const DeleteContent: FC<{
                     )}
                 </BodyText>
             </TextBlock>
-            {!isKeystone && !isReadOnly && (
+
+            {!isKeystone && (
                 <DisclaimerBlock>
                     <DisclaimerText>
                         <Checkbox checked={checked} onChange={setChecked} light>
@@ -74,7 +160,7 @@ const DeleteContent: FC<{
                         onClick={() =>
                             onClose(() =>
                                 navigate(
-                                    AppRoute.settings + SettingsRoute.recovery + '/' + accountId
+                                    AppRoute.settings + SettingsRoute.recovery + '/' + walletId
                                 )
                             )
                         }
@@ -83,14 +169,13 @@ const DeleteContent: FC<{
                     </DisclaimerLink>
                 </DisclaimerBlock>
             )}
-            {(isKeystone || isReadOnly) && <div style={{ height: 16 }} />}
+            {isKeystone && <div style={{ height: 16 }} />}
             <Button
-                disabled={!checked}
+                disabled={!checked && !isKeystone}
                 size="large"
                 fullWidth
                 loading={isLoading}
                 onClick={onDelete}
-                type="button"
             >
                 {t('Delete_wallet_data')}
             </Button>
@@ -98,27 +183,26 @@ const DeleteContent: FC<{
     );
 };
 
-export const DeleteAccountNotification: FC<{
-    account?: Account;
+export const DeleteWalletNotification: FC<{
+    wallet?: TonWalletState;
     handleClose: () => void;
-}> = ({ account, handleClose }) => {
+}> = ({ wallet, handleClose }) => {
     const Content = useCallback(
         (afterClose: (action: () => void) => void) => {
-            if (!account) return undefined;
+            if (!wallet) return undefined;
             return (
                 <DeleteContent
-                    accountId={account.id}
+                    walletId={wallet.id}
                     onClose={afterClose}
-                    isKeystone={account.type === 'keystone'}
-                    isReadOnly={account.type === 'watch-only'}
+                    isKeystone={isStandardTonWallet(wallet) && wallet.auth.kind === 'keystone'}
                 />
             );
         },
-        [account]
+        [wallet]
     );
 
     return (
-        <Notification isOpen={account != null} handleClose={handleClose}>
+        <Notification isOpen={wallet != null} handleClose={handleClose}>
             {Content}
         </Notification>
     );
@@ -166,7 +250,6 @@ const DeleteAllContent: FC<{ onClose: (action: () => void) => void }> = ({ onClo
                 fullWidth
                 loading={isLoading}
                 onClick={onDelete}
-                type="button"
             >
                 {t('Delete_wallet_data')}
             </Button>

@@ -1,14 +1,14 @@
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from '../../hooks/translation';
-import { DeleteAllNotification } from './DeleteAccountNotification';
+import { DeleteAllNotification } from './LogOutNotification';
 import { DeleteAccountIcon } from './SettingsIcons';
 import { SettingsList } from './SettingsList';
-import { useAccountsState } from '../../state/wallet';
+import { useWalletsState } from '../../state/wallet';
 
 export const ClearSettings = () => {
     const { t } = useTranslation();
 
-    const wallets = useAccountsState();
+    const wallets = useWalletsState();
     const [open, setOpen] = useState(false);
     const deleteItems = useMemo(() => {
         return [

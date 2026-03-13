@@ -1,26 +1,22 @@
 import { Analytics } from '@tonkeeper/uikit/dist/hooks/analytics';
 import { sendBackground } from '../event';
-import { Account } from "@tonkeeper/core/dist/entries/account";
-import { Network } from "@tonkeeper/core/dist/entries/network";
 
 export class AptabaseExtension implements Analytics {
-    init =  (params: {
-        application: string;
-        walletType: string;
-        activeAccount: Account;
-        accounts: Account[];
-        network?: Network;
-        version?: string;
-        platform?: string;
-    }) => {
+    init = (
+        application: string,
+        walletType: string,
+        account?: any,
+        wallet?: any,
+        version?: string | undefined,
+        platform?: string | undefined
+    ) => {
         sendBackground.message('userProperties', {
-            application: params.application,
-            walletType: params.walletType,
-            accounts: params.accounts,
-            activeAccount: params.activeAccount,
-            version: params.version,
-            network: params.network,
-            platform: params.platform
+            application,
+            walletType,
+            account,
+            wallet,
+            version,
+            platform
         });
     };
 

@@ -2,6 +2,7 @@ import { KeystonePathInfo } from '../service/keystone/types';
 
 export type AuthState =
     | AuthPassword
+    | WebAuthn
     | AuthKeychain
     | AuthSigner
     | AuthSignerDeepLink
@@ -38,12 +39,20 @@ export interface AuthKeystone {
     info?: KeystonePathInfo;
 }
 
+export interface WebAuthn {
+    kind: 'webauthn';
+    type: 'largeBlob' | 'credBlob' | 'userHandle';
+    credentialId: string;
+    transports?: AuthenticatorTransport[];
+}
+
 /**
  * @deprecated
  */
 export type DeprecatedAuthState =
     | DeprecatedAuthNone
     | DeprecatedAuthPassword
+    | WebAuthn
     | DeprecatedKeychainPassword
     | AuthSigner
     | AuthSignerDeepLink

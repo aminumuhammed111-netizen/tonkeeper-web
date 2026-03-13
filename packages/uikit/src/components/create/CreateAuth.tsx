@@ -15,11 +15,10 @@ const Block = styled.form`
     flex-direction: column;
 `;
 
-export const CreatePassword: FC<{
+const FillPassword: FC<{
     afterCreate: (password: string) => void;
     isLoading?: boolean;
-    className?: string;
-}> = ({ afterCreate, isLoading, className }) => {
+}> = ({ afterCreate, isLoading }) => {
     const { t } = useTranslation();
     const sdk = useAppSdk();
 
@@ -52,7 +51,7 @@ export const CreatePassword: FC<{
     }, [ref]);
 
     return (
-        <CenterContainer className={className}>
+        <CenterContainer>
             <Block onSubmit={onCreate}>
                 <H2>{t('Create_password')}</H2>
                 <Input
@@ -93,4 +92,11 @@ export const CreatePassword: FC<{
             </Block>
         </CenterContainer>
     );
+};
+
+export const CreateAuthState: FC<{
+    afterCreate: (password?: string) => void;
+    isLoading?: boolean;
+}> = ({ afterCreate, isLoading }) => {
+    return <FillPassword afterCreate={afterCreate} isLoading={isLoading} />;
 };

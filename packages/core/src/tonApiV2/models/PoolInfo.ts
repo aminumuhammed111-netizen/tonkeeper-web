@@ -118,8 +118,6 @@ export interface PoolInfo {
     cycleLength?: number;
 }
 
-
-
 /**
  * Check if a given object implements the PoolInfo interface.
  */

@@ -36,7 +36,7 @@ import {
     WithdrawStakeAction
 } from './StakeActivity';
 import { SubscribeAction, UnSubscribeAction } from './SubscribeAction';
-import { useActiveTonNetwork, useActiveWallet } from '../../../state/wallet';
+import { useActiveWallet } from '../../../state/wallet';
 
 const TonTransferAction: FC<{
     action: Action;
@@ -45,7 +45,6 @@ const TonTransferAction: FC<{
 }> = ({ action, date, isScam }) => {
     const wallet = useActiveWallet();
     const { tonTransfer } = action;
-    const network = useActiveTonNetwork();
 
     const format = useFormatCoinValue();
 
@@ -59,7 +58,7 @@ const TonTransferAction: FC<{
                 amount={format(tonTransfer.amount)}
                 sender={
                     tonTransfer.sender.name ??
-                    toShortValue(formatAddress(tonTransfer.sender.address, network))
+                    toShortValue(formatAddress(tonTransfer.sender.address, wallet.network))
                 }
                 symbol={CryptoCurrency.TON}
                 date={date}
@@ -75,7 +74,7 @@ const TonTransferAction: FC<{
             symbol={CryptoCurrency.TON}
             recipient={
                 tonTransfer.recipient.name ??
-                toShortValue(formatAddress(tonTransfer.recipient.address, network))
+                toShortValue(formatAddress(tonTransfer.recipient.address, wallet.network))
             }
             date={date}
             isScam={isScam}
@@ -93,7 +92,6 @@ export const SmartContractExecAction: FC<{
     const { smartContractExec } = action;
     const wallet = useActiveWallet();
     const format = useFormatCoinValue();
-    const network = useActiveTonNetwork();
 
     if (!smartContractExec) {
         return <ErrorAction />;
@@ -111,7 +109,7 @@ export const SmartContractExecAction: FC<{
                     green
                     entry={CryptoCurrency.TON}
                     address={toShortValue(
-                        formatAddress(smartContractExec.contract.address, network)
+                        formatAddress(smartContractExec.contract.address, wallet.network)
                     )}
                     date={date}
                 />
@@ -129,7 +127,7 @@ export const SmartContractExecAction: FC<{
                     amount={<>-&thinsp;{format(smartContractExec.tonAttached)}</>}
                     entry={CryptoCurrency.TON}
                     address={toShortValue(
-                        formatAddress(smartContractExec.contract.address, network, true)
+                        formatAddress(smartContractExec.contract.address, wallet.network, true)
                     )}
                     date={date}
                 />
@@ -145,7 +143,7 @@ const AuctionBidAction: FC<{
 }> = ({ action, date }) => {
     const { t } = useTranslation();
     const { auctionBid } = action;
-    const network = useActiveTonNetwork();
+    const wallet = useActiveWallet();
     const format = useFormatCoinValue();
 
     if (!auctionBid) {
@@ -168,7 +166,7 @@ const AuctionBidAction: FC<{
                         {(auctionBid.auctionType as string) !== ''
                             ? auctionBid.auctionType
                             : toShortValue(
-                                  formatAddress(auctionBid.auction.address, network, true)
+                                  formatAddress(auctionBid.auction.address, wallet.network, true)
                               )}
                     </SecondaryText>
                     <SecondaryText>{date}</SecondaryText>

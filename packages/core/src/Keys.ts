@@ -1,21 +1,10 @@
 export enum AppKey {
-    /**
-     * @deprecated
-     */
     DEPRECATED_ACCOUNT = 'account',
-    /**
-     * @deprecated
-     */
     DEPRECATED_WALLET = 'wallet',
-    /**
-     * @deprecated
-     */
-    DEPRECATED_MNEMONIC = 'mnemonic',
-
-    ACCOUNTS = 'accounts',
-    ACTIVE_ACCOUNT_ID = 'active_account_id',
+    WALLETS = 'wallets',
+    ACTIVE_WALLET_ID = 'active_wallet_id',
     WALLET_CONFIG = 'wallet_config',
-    GLOBAL_PREFERENCES_CONFIG = 'global_preferences_config',
+    DEPRECATED_MNEMONIC = 'mnemonic',
 
     THEME = 'theme',
     UI_PREFERENCES = 'ui_preferences',
