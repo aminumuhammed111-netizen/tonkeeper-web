@@ -4,7 +4,9 @@ import {
     ConnectRequest,
     DAppManifest
 } from '@tonkeeper/core/dist/entries/tonConnect';
+import { isStandardTonWallet, walletVersionText } from '@tonkeeper/core/dist/entries/wallet';
 import { getManifest } from '@tonkeeper/core/dist/service/tonConnect/connectService';
+import { formatAddress, toShortValue } from '@tonkeeper/core/dist/utils/common';
 import React, { FC, useCallback, useEffect, useState } from 'react';
 import styled from 'styled-components';
 import { useAppSdk } from '../../hooks/appSdk';
@@ -12,24 +14,21 @@ import { useTranslation } from '../../hooks/translation';
 import { TxConfirmationCustomError } from '../../libs/errors/TxConfirmationCustomError';
 import { QueryKey } from '../../libs/queryKey';
 import { useIsActiveWalletLedger } from '../../state/ledger';
-import { useConnectTonConnectAppMutation } from '../../state/tonConnect';
-import { useIsActiveWalletWatchOnly } from '../../state/wallet';
 import { CheckmarkCircleIcon, ExclamationMarkCircleIcon } from '../Icon';
 import { Notification, NotificationBlock } from '../Notification';
 import { Body2, Body3, H2, Label2 } from '../Text';
-import { AccountAndWalletInfo } from '../account/AccountAndWalletInfo';
 import { Button } from '../fields/Button';
 import { ResultButton } from '../transfer/common';
+import { useConnectTonConnectAppMutation } from '../../state/tonConnect';
+import { useActiveWallet } from '../../state/wallet';
 
 const Title = styled(H2)`
     text-align: center;
     user-select: none;
 `;
 const SubTitle = styled(Body2)`
-    margin-top: 4px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
+    margin-ton: 4px;
+    display: block;
     color: ${props => props.theme.textSecondary};
     text-align: center;
     user-select: none;
@@ -41,6 +40,10 @@ const Notes = styled(Body3)`
     text-align: center;
     user-select: none;
     max-width: 300px;
+`;
+
+const Address = styled.span`
+    color: ${props => props.theme.textTertiary};
 `;
 
 const ImageRow = styled.div`
@@ -78,10 +81,10 @@ const ConnectContent: FC<{
     handleClose: (result?: ConnectItemReply[], manifest?: DAppManifest) => void;
 }> = ({ params, manifest, origin, handleClose }) => {
     const activeIsLedger = useIsActiveWalletLedger();
-    const isReadOnly = useIsActiveWalletWatchOnly();
-
     const sdk = useAppSdk();
     const [done, setDone] = useState(false);
+
+    const wallet = useActiveWallet();
 
     const { t } = useTranslation();
 
@@ -106,6 +109,8 @@ const ConnectContent: FC<{
         }
     };
 
+    const address = formatAddress(wallet.rawAddress, wallet.network);
+
     let shortUrl = manifest.url;
     try {
         shortUrl = new URL(manifest.url).hostname;
@@ -113,8 +118,9 @@ const ConnectContent: FC<{
         /* eslint-stub */
     }
 
-    const tonProofRequested = params.items.some(item => item.name === 'ton_proof');
-    const cantConnectLedger = activeIsLedger && tonProofRequested;
+    if (!isStandardTonWallet(wallet)) {
+        return <></>;
+    }
 
     return (
         <NotificationBlock onSubmit={onSubmit}>
@@ -127,7 +133,7 @@ const ConnectContent: FC<{
                 <Title>{t('ton_login_title_web').replace('%{name}', shortUrl)}</Title>
                 <SubTitle>
                     {t('ton_login_caption').replace('%{name}', getDomain(manifest.name))}{' '}
-                    <AccountAndWalletInfo />
+                    <Address>{toShortValue(address)}</Address> {walletVersionText(wallet.version)}
                 </SubTitle>
             </div>
 
@@ -154,16 +160,13 @@ const ConnectContent: FC<{
                         fullWidth
                         primary
                         loading={isLoading}
-                        disabled={isLoading || cantConnectLedger || isReadOnly}
+                        disabled={isLoading || activeIsLedger}
                         type="submit"
                     >
                         {t('ton_login_connect_button')}
                     </Button>
                 )}
-                {cantConnectLedger && (
-                    <LedgerError>{t('ledger_operation_not_supported')}</LedgerError>
-                )}
-                {isReadOnly && <LedgerError>{t('operation_not_supported')}</LedgerError>}
+                {activeIsLedger && <LedgerError>{t('ledger_operation_not_supported')}</LedgerError>}
             </>
             <Notes>{t('ton_login_notice')}</Notes>
         </NotificationBlock>

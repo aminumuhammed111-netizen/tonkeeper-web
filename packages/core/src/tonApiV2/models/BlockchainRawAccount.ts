@@ -106,8 +106,6 @@ export interface BlockchainRawAccount {
     libraries?: Array<BlockchainRawAccountLibrariesInner>;
 }
 
-
-
 /**
  * Check if a given object implements the BlockchainRawAccount interface.
  */

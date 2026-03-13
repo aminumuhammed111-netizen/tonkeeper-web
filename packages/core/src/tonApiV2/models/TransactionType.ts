@@ -32,7 +32,7 @@ export type TransactionType = typeof TransactionType[keyof typeof TransactionTyp
 export function instanceOfTransactionType(value: any): boolean {
     for (const key in TransactionType) {
         if (Object.prototype.hasOwnProperty.call(TransactionType, key)) {
-            if (TransactionType[key as keyof typeof TransactionType] === value) {
+            if ((TransactionType as Record<string, TransactionType>)[key] === value) {
                 return true;
             }
         }

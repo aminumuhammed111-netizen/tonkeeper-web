@@ -1,19 +1,8 @@
 import { NFT } from '@tonkeeper/core/dist/entries/nft';
-import { TrustType } from '@tonkeeper/core/dist/tonApiV2';
-import { FC, useMemo, useRef } from 'react';
+import React, { FC, useMemo, useRef } from 'react';
 import styled from 'styled-components';
-import { useAppContext } from '../../hooks/appContext';
-import { useAppSdk } from '../../hooks/appSdk';
 import { useTranslation } from '../../hooks/translation';
-import { useDisclosure } from '../../hooks/useDisclosure';
-import {
-    useHideNft,
-    useMarkNftAsSpam,
-    useMarkNftAsTrusted,
-    useNftCollectionData
-} from '../../state/nft';
-import { useActiveTonWalletConfig } from '../../state/wallet';
-import { DropDown } from '../DropDown';
+import { useActiveWalletConfig } from '../../state/wallet';
 import {
     BlockIcon,
     ChevronDownIcon,
@@ -23,16 +12,22 @@ import {
     InfoCircleIcon,
     VerificationIcon
 } from '../Icon';
-import { ListBlock, ListItemElement, ListItemPayload } from '../List';
 import { NotificationBlock, NotificationTitleBlock } from '../Notification';
 import { Body2, H2, H3, Label1, Label4 } from '../Text';
-import { Button } from '../fields/Button';
 import { RoundedButton } from '../fields/RoundedButton';
 import { Body, CroppedBodyText } from '../jettons/CroppedText';
 import { NftAction } from './NftAction';
 import { NftDetails } from './NftDetails';
 import { Image, NftBlock } from './Nfts';
+import { TrustType } from '@tonkeeper/core/dist/tonApiV2';
+import { Button } from '../fields/Button';
+import { useHideNft, useMarkNftAsSpam, useMarkNftAsTrusted, useNftCollectionData } from "../../state/nft";
 import { UnverifiedNftNotification } from './UnverifiedNftNotification';
+import { useDisclosure } from '../../hooks/useDisclosure';
+import { DropDown } from '../DropDown';
+import { ListBlock, ListItemElement, ListItemPayload } from '../List';
+import { useAppContext } from '../../hooks/appContext';
+import { useAppSdk } from '../../hooks/appSdk';
 
 const Text = styled.div`
     display: flex;
@@ -135,7 +130,7 @@ export const NftPreview: FC<{
     const { mutate: markNftAsTrusted, isLoading: markNftAsTrustedLoading } = useMarkNftAsTrusted();
     const { mutateAsync: hideNft } = useHideNft();
 
-    const { data } = useActiveTonWalletConfig();
+    const { data } = useActiveWalletConfig();
     const isSuspicious = nftItem.trust !== TrustType.Whitelist;
     const isTrusted = !!data?.trustedNfts.includes(nftItem.collection?.address || nftItem.address);
 

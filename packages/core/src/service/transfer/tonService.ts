@@ -1,16 +1,14 @@
-import { Address, Cell, internal } from '@ton/core';
+import { Address, Cell, internal, loadStateInit } from '@ton/core';
+import { Maybe } from '@ton/core/dist/utils/maybe';
 import BigNumber from 'bignumber.js';
-import { AccountControllable } from '../../entries/account';
 import { APIConfig } from '../../entries/apis';
 import { AssetAmount } from '../../entries/crypto/asset/asset-amount';
 import { TonRecipientData, TransferEstimationEvent } from '../../entries/send';
 import { CellSigner, Signer } from '../../entries/signer';
 import { TonConnectTransactionPayload } from '../../entries/tonConnect';
-import { TonWalletStandard } from '../../entries/wallet';
-import { LedgerError } from '../../errors/LedgerError';
+import { StandardTonWalletState } from '../../entries/wallet';
 import { AccountsApi, BlockchainApi, EmulationApi } from '../../tonApiV2';
 import { createLedgerTonTransfer } from '../ledger/transfer';
-import { getLedgerAccountPathByIndex } from '../ledger/utils';
 import { walletContractFromState } from '../wallet/contractService';
 import {
     SendMode,
@@ -23,18 +21,30 @@ import {
     getWalletSeqNo,
     seeIfAddressBounceable,
     seeIfTransferBounceable,
-    signEstimateMessage,
-    toStateInit
+    signEstimateMessage
 } from './common';
 
 export type EstimateData = {
     accountEvent: TransferEstimationEvent;
 };
 
+export const toStateInit = (
+    stateInit?: string
+): { code: Maybe<Cell>; data: Maybe<Cell> } | undefined => {
+    if (!stateInit) {
+        return undefined;
+    }
+    const { code, data } = loadStateInit(Cell.fromBase64(stateInit).asSlice());
+    return {
+        code,
+        data
+    };
+};
+
 const createTonTransfer = async (
     timestamp: number,
     seqno: number,
-    walletState: TonWalletStandard,
+    walletState: StandardTonWalletState,
     recipient: TonRecipientData,
     weiAmount: BigNumber,
     isMax: boolean,
@@ -63,54 +73,11 @@ const createTonTransfer = async (
 const createTonConnectTransfer = async (
     timestamp: number,
     seqno: number,
-    account: AccountControllable,
+    walletState: StandardTonWalletState,
     params: TonConnectTransactionPayload,
-    signer: Signer
+    signer: CellSigner
 ) => {
-    const walletState = account.activeTonWallet;
     const contract = walletContractFromState(walletState);
-
-    if (signer.type === 'ledger') {
-        if (params.messages.length !== 1) {
-            throw new Error('Ledger signer does not support multiple messages');
-        }
-        if (account.type !== 'ledger') {
-            throw new Error('Ledger signer can only be used with ledger accounts');
-        }
-
-        const message = params.messages[0];
-        const path = getLedgerAccountPathByIndex(account.activeDerivationIndex);
-
-        let transfer: Cell;
-        try {
-            transfer = await signer(path, {
-                to: Address.parse(message.address),
-                bounce: seeIfAddressBounceable(message.address),
-                amount: BigInt(message.amount),
-                seqno,
-                timeout: getTTL(timestamp),
-                sendMode: SendMode.PAY_GAS_SEPARATELY + SendMode.IGNORE_ERRORS,
-                payload: message.payload
-                    ? {
-                          type: 'unsafe',
-                          message: Cell.fromBase64(message.payload)
-                      }
-                    : undefined,
-                stateInit: toStateInit(message.stateInit)
-            });
-        } catch (e) {
-            console.error(e);
-            throw new LedgerError(
-                typeof e === 'string'
-                    ? e
-                    : typeof e === 'object' && e && 'message' in e
-                    ? (e.message as string)
-                    : 'Unknown error'
-            );
-        }
-
-        return externalMessage(contract, seqno, transfer).toBoc();
-    }
 
     const transfer = await contract.createTransferAndSignRequestAsync({
         seqno,
@@ -132,7 +99,7 @@ const createTonConnectTransfer = async (
 
 export const estimateTonTransfer = async (
     api: APIConfig,
-    walletState: TonWalletStandard,
+    walletState: StandardTonWalletState,
     recipient: TonRecipientData,
     weiAmount: BigNumber,
     isMax: boolean
@@ -153,18 +120,20 @@ export const estimateTonTransfer = async (
         signEstimateMessage
     );
 
-    const result = await new EmulationApi(api.tonApiV2).emulateMessageToWallet({
-        emulateMessageToWalletRequest: { boc: cell.toString('base64') }
+    const event = await new EmulationApi(api.tonApiV2).emulateMessageToAccountEvent({
+        ignoreSignatureCheck: true,
+        accountId: wallet.address,
+        decodeMessageRequest: { boc: cell.toString('base64') }
     });
 
-    return result;
+    return { event };
 };
 
 export type ConnectTransferError = { kind: 'not-enough-balance' } | { kind: undefined };
 
 export const tonConnectTransferError = async (
     api: APIConfig,
-    walletState: TonWalletStandard,
+    walletState: StandardTonWalletState,
     params: TonConnectTransactionPayload
 ): Promise<ConnectTransferError> => {
     const wallet = await new AccountsApi(api.tonApiV2).getAccount({
@@ -185,38 +154,40 @@ export const tonConnectTransferError = async (
 
 export const estimateTonConnectTransfer = async (
     api: APIConfig,
-    account: AccountControllable,
+    walletState: StandardTonWalletState,
     params: TonConnectTransactionPayload
 ): Promise<TransferEstimationEvent> => {
     const timestamp = await getServerTime(api);
-    const [wallet, seqno] = await getWalletBalance(api, account.activeTonWallet);
+    const [wallet, seqno] = await getWalletBalance(api, walletState);
     checkWalletPositiveBalanceOrDie(wallet);
 
     const cell = await createTonConnectTransfer(
         timestamp,
         seqno,
-        account,
+        walletState,
         params,
         signEstimateMessage
     );
 
-    const result = await new EmulationApi(api.tonApiV2).emulateMessageToWallet({
-        emulateMessageToWalletRequest: { boc: cell.toString('base64') }
+    const event = await new EmulationApi(api.tonApiV2).emulateMessageToAccountEvent({
+        ignoreSignatureCheck: true,
+        accountId: wallet.address,
+        decodeMessageRequest: { boc: cell.toString('base64') }
     });
 
-    return result;
+    return { event };
 };
 
 export const sendTonConnectTransfer = async (
     api: APIConfig,
-    account: AccountControllable,
+    walletState: StandardTonWalletState,
     params: TonConnectTransactionPayload,
-    signer: Signer
+    signer: CellSigner
 ) => {
     const timestamp = await getServerTime(api);
-    const seqno = await getWalletSeqNo(api, account.activeTonWallet.rawAddress);
+    const seqno = await getWalletSeqNo(api, walletState.rawAddress);
 
-    const external = await createTonConnectTransfer(timestamp, seqno, account, params, signer);
+    const external = await createTonConnectTransfer(timestamp, seqno, walletState, params, signer);
 
     const boc = external.toString('base64');
 
@@ -229,7 +200,7 @@ export const sendTonConnectTransfer = async (
 
 export const sendTonTransfer = async (
     api: APIConfig,
-    account: AccountControllable,
+    walletState: StandardTonWalletState,
     recipient: TonRecipientData,
     amount: AssetAmount,
     isMax: boolean,
@@ -240,36 +211,17 @@ export const sendTonTransfer = async (
 
     const total = new BigNumber(fee.event.extra).multipliedBy(-1).plus(amount.weiAmount);
 
-    const wallet = account.activeTonWallet;
-    const [tonapiWallet, seqno] = await getWalletBalance(api, wallet);
+    const [wallet, seqno] = await getWalletBalance(api, walletState);
     if (!isMax) {
-        checkWalletBalanceOrDie(total, tonapiWallet);
+        checkWalletBalanceOrDie(total, wallet);
     }
 
     let buffer: Buffer;
+    const params = [timestamp, seqno, walletState, recipient, amount.weiAmount, isMax] as const;
     if (signer.type === 'ledger') {
-        if (account.type !== 'ledger') {
-            throw new Error(`Unexpected account type: ${account.type}`);
-        }
-        buffer = await createLedgerTonTransfer(
-            timestamp,
-            seqno,
-            account,
-            recipient,
-            amount.weiAmount,
-            isMax,
-            signer
-        );
+        buffer = await createLedgerTonTransfer(...params, signer);
     } else {
-        buffer = await createTonTransfer(
-            timestamp,
-            seqno,
-            wallet,
-            recipient,
-            amount.weiAmount,
-            isMax,
-            signer
-        );
+        buffer = await createTonTransfer(...params, signer);
     }
 
     await new BlockchainApi(api.tonApiV2).sendBlockchainMessage({

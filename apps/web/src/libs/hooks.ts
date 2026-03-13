@@ -1,12 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
-import { Account } from "@tonkeeper/core/dist/entries/account";
+import { WalletsState, WalletState } from "@tonkeeper/core/dist/entries/wallet";
 import { throttle } from '@tonkeeper/core/dist/utils/common';
 import { Analytics, AnalyticsGroup, toWalletType } from '@tonkeeper/uikit/dist/hooks/analytics';
 import { AptabaseWeb } from '@tonkeeper/uikit/dist/hooks/analytics/aptabase-web';
 import { Gtag } from '@tonkeeper/uikit/dist/hooks/analytics/gtag';
 import { QueryKey } from '@tonkeeper/uikit/dist/libs/queryKey';
 import { useEffect } from 'react';
-import { useActiveTonNetwork } from "@tonkeeper/uikit/dist/state/wallet";
 
 export const useAppHeight = () => {
     useEffect(() => {
@@ -49,13 +48,12 @@ export const useAppWidth = (standalone: boolean) => {
 };
 
 export const useAnalytics = (
-    activeAccount?: Account,
-    accounts?: Account[],
+    activeWallet?: WalletState,
+    wallets?: WalletsState,
     version?: string
 ) => {
-    const network = useActiveTonNetwork();
     return useQuery<Analytics>(
-        [QueryKey.analytics, network],
+        [QueryKey.analytics],
         async () => {
             const tracker = new AnalyticsGroup(
                 new AptabaseWeb(
@@ -66,17 +64,12 @@ export const useAnalytics = (
                 new Gtag(import.meta.env.VITE_APP_MEASUREMENT_ID)
             );
 
-            tracker.init({
-                application: 'Web',
-                walletType: toWalletType(activeAccount?.activeTonWallet),
-                activeAccount: activeAccount!,
-                accounts: accounts!,
-                network
-            }
-        );
+            tracker.init('Web',  toWalletType(activeWallet),
+              activeWallet,
+              wallets,);
 
             return tracker;
         },
-      { enabled: accounts != null && activeAccount !== undefined }
+      { enabled: wallets != null && activeWallet !== undefined }
     );
 };

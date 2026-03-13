@@ -1,10 +1,10 @@
+import { walletsStorage } from '@tonkeeper/core/dist/service/walletsService';
 import { useAppSdk } from './appSdk';
 import { passwordStorage } from '@tonkeeper/core/dist/service/passwordService';
-import { accountsStorage } from '@tonkeeper/core/dist/service/accountsStorage';
 
-export const useAccountsStorage = () => {
+export const useWalletsStorage = () => {
     const sdk = useAppSdk();
-    return accountsStorage(sdk.storage);
+    return walletsStorage(sdk.storage);
 };
 
 export const usePasswordStorage = () => {

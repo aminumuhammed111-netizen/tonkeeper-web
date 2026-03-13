@@ -2,7 +2,7 @@ import { Address } from '@ton/core';
 import { TON_ASSET } from '@tonkeeper/core/dist/entries/crypto/asset/constants';
 import { TonAsset, isTon } from '@tonkeeper/core/dist/entries/crypto/asset/ton-asset';
 import { DnsRecipient, TonRecipient } from '@tonkeeper/core/dist/entries/send';
-import { isW5Version } from '@tonkeeper/core/dist/entries/wallet';
+import { isW5Version, StandardTonWalletState } from '@tonkeeper/core/dist/entries/wallet';
 import { arrayToCsvString } from '@tonkeeper/core/dist/service/parserService';
 import { MAX_ALLOWED_WALLET_MSGS } from '@tonkeeper/core/dist/service/transfer/multiSendService';
 import { shiftedDecimals } from '@tonkeeper/core/dist/utils/balance';
@@ -51,7 +51,7 @@ import { ImportListNotification } from './import-list/ImportListNotification';
 import { getWillBeMultiSendValue } from './utils';
 import { removeGroupSeparator } from '@tonkeeper/core/dist/utils/send';
 import { getDecimalSeparator } from '@tonkeeper/core/dist/utils/formatting';
-import { useActiveStandardTonWallet } from '../../../state/wallet';
+import { useActiveWallet } from '../../../state/wallet';
 
 const FormHeadingWrapper = styled.div`
     display: flex;
@@ -319,7 +319,7 @@ const MultiSendAddMore: FC<{
 }> = ({ onAdd, fieldsNumber }) => {
     const { t } = useTranslation();
 
-    const wallet = useActiveStandardTonWallet();
+    const wallet = useActiveWallet() as StandardTonWalletState;
 
     if (fieldsNumber < MAX_ALLOWED_WALLET_MSGS[wallet.version]) {
         return (
@@ -483,9 +483,10 @@ const MultiSendFooter: FC<{
 
     const { formState: formValidationState } = useAsyncValidationState();
 
-    const wallet = useActiveStandardTonWallet();
+    const wallet = useActiveWallet();
 
-    const maxMsgsNumberExceeded = watch('rows').length > MAX_ALLOWED_WALLET_MSGS[wallet.version];
+    const maxMsgsNumberExceeded =
+        watch('rows').length > MAX_ALLOWED_WALLET_MSGS[(wallet as StandardTonWalletState).version];
 
     const isLedger = useIsActiveWalletLedger();
 

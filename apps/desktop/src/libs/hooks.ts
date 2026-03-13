@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { AppKey } from '@tonkeeper/core/dist/Keys';
-import { Account } from '@tonkeeper/core/dist/entries/account';
+import { WalletsState, WalletState } from '@tonkeeper/core/dist/entries/wallet';
 import { throttle } from '@tonkeeper/core/dist/utils/common';
 import { Analytics, AnalyticsGroup, toWalletType } from '@tonkeeper/uikit/dist/hooks/analytics';
 import { Amplitude } from '@tonkeeper/uikit/dist/hooks/analytics/amplitude';
@@ -9,7 +9,6 @@ import { QueryKey } from '@tonkeeper/uikit/dist/libs/queryKey';
 import { useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { AptabaseElectron } from './aptabaseElectron';
-import { useActiveTonNetwork } from '@tonkeeper/uikit/dist/state/wallet';
 
 export const useAppHeight = () => {
     useEffect(() => {
@@ -48,9 +47,12 @@ export const useAppWidth = () => {
 
 declare const REACT_APP_AMPLITUDE: string;
 
-export const useAnalytics = (version: string, activeAccount?: Account, accounts?: Account[]) => {
+export const useAnalytics = (
+    version: string,
+    activeWallet?: WalletState,
+    wallets?: WalletsState
+) => {
     const sdk = useAppSdk();
-    const network = useActiveTonNetwork();
 
     return useQuery<Analytics>(
         [QueryKey.analytics],
@@ -72,18 +74,17 @@ export const useAnalytics = (version: string, activeAccount?: Account, accounts?
                 new Amplitude(REACT_APP_AMPLITUDE, userId)
             );
 
-            tracker.init({
-                application: 'Desktop',
-                walletType: toWalletType(activeAccount.activeTonWallet),
-                activeAccount,
-                accounts,
-                network,
+            tracker.init(
+                'Desktop',
+                toWalletType(activeWallet),
+                activeWallet,
+                wallets,
                 version,
-                platform: `${window.backgroundApi.platform()}-${window.backgroundApi.arch()}`
-            });
+                `${window.backgroundApi.platform()}-${window.backgroundApi.arch()}`
+            );
 
             return tracker;
         },
-        { enabled: accounts != null && activeAccount !== undefined }
+        { enabled: wallets != null && activeWallet !== undefined }
     );
 };

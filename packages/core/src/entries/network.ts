@@ -40,4 +40,3 @@ export const getApiConfig = (config: TonendpointConfig, network?: Network, TonCo
         tronApi: getTronClient(network)
     };
 };
-

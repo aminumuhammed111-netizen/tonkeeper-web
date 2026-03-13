@@ -1,4 +1,4 @@
-import { TonWalletConfig } from '@tonkeeper/core/dist/entries/wallet';
+import { ActiveWalletConfig } from '@tonkeeper/core/dist/entries/wallet';
 import { JettonBalance } from '@tonkeeper/core/dist/tonApiV2';
 import { FC, useCallback, useMemo } from 'react';
 import {
@@ -24,7 +24,7 @@ import {
     useToggleHideJettonMutation,
     useTogglePinJettonMutation
 } from '../../state/jetton';
-import { useActiveTonWalletConfig } from '../../state/wallet';
+import { useActiveWalletConfig } from '../../state/wallet';
 
 const TurnOnIcon = styled.span`
     color: ${props => props.theme.accentBlue};
@@ -57,7 +57,7 @@ const RadioWrapper = styled.span`
     cursor: pointer;
 `;
 
-const SampleJettonRow: FC<{ jetton: JettonBalance; config: TonWalletConfig }> = ({
+const SampleJettonRow: FC<{ jetton: JettonBalance; config: ActiveWalletConfig }> = ({
     jetton,
     config
 }) => {
@@ -116,7 +116,7 @@ const SampleJettonRow: FC<{ jetton: JettonBalance; config: TonWalletConfig }> = 
 };
 
 export const PinnedJettonList: FC<{
-    config: TonWalletConfig;
+    config: ActiveWalletConfig;
     jettons: JettonBalance[];
 }> = ({ config, jettons }) => {
     const { mutate } = useSavePinnedJettonOrderMutation();
@@ -183,7 +183,7 @@ export const PinnedJettonList: FC<{
 
 const JettonRow: FC<{
     jetton: JettonBalance;
-    config: TonWalletConfig;
+    config: ActiveWalletConfig;
     dragHandleProps: DraggableProvidedDragHandleProps | null | undefined;
 }> = ({ jetton, config, dragHandleProps }) => {
     const { t } = useTranslation();
@@ -236,7 +236,7 @@ export const JettonsSettings = () => {
     const { t } = useTranslation();
 
     const { data: jettons } = useJettonRawList();
-    const { data: config } = useActiveTonWalletConfig();
+    const { data: config } = useActiveWalletConfig();
 
     if (!jettons || !config) {
         return <JettonSkeleton />;

@@ -1,20 +1,19 @@
 import * as amplitude from '@amplitude/analytics-browser';
 import { Network } from '@tonkeeper/core/dist/entries/network';
-import { Account } from '@tonkeeper/core/dist/entries/account';
+import { WalletsState, WalletState } from '@tonkeeper/core/dist/entries/wallet';
 import { Analytics } from '.';
 
 export class Amplitude implements Analytics {
     constructor(private key: string, private userId?: string) {}
 
-    init(params: {
-        application: string;
-        walletType: string;
-        activeAccount: Account;
-        accounts: Account[];
-        network?: Network;
-        version?: string;
-        platform?: string;
-    }) {
+    init(
+        application: string,
+        walletType: string,
+        activeWallet?: WalletState,
+        wallets?: WalletsState,
+        version?: string,
+        platform?: string
+    ) {
         amplitude.init(this.key, this.userId, {
             defaultTracking: {
                 sessions: true,
@@ -25,12 +24,12 @@ export class Amplitude implements Analytics {
         });
 
         const event = new amplitude.Identify();
-        event.set('application', params.application ?? 'Unknown');
-        event.set('walletType', params.walletType);
-        event.set('network', params.network === Network.TESTNET ? 'testnet' : 'mainnet');
-        event.set('accounts', params.accounts?.length ?? 0);
-        event.set('version', params.version ?? 'Unknown');
-        event.set('platform', params.platform ?? 'Unknown');
+        event.set('application', application ?? 'Unknown');
+        event.set('walletType', walletType);
+        event.set('network', activeWallet?.network === Network.TESTNET ? 'testnet' : 'mainnet');
+        event.set('accounts', wallets?.length ?? 0);
+        event.set('version', version ?? 'Unknown');
+        event.set('platform', platform ?? 'Unknown');
 
         amplitude.identify(event);
     }

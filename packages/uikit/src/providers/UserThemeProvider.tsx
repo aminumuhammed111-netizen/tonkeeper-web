@@ -2,7 +2,6 @@ import { FC, PropsWithChildren, useEffect, useMemo } from 'react';
 import { DefaultTheme, ThemeProvider } from 'styled-components';
 import { availableThemes, useMutateUserUIPreferences, useUserUIPreferences } from '../state/theme';
 import { usePrevious } from '../hooks/usePrevious';
-import { getUserOS } from '../libs/web';
 export const UserThemeProvider: FC<
     PropsWithChildren<{
         displayType?: 'compact' | 'full-width';
@@ -36,8 +35,6 @@ export const UserThemeProvider: FC<
         if (displayType) {
             theme.displayType = displayType;
         }
-
-        theme.os = getUserOS();
 
         window.document.body.style.background = theme.backgroundPage;
 

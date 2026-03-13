@@ -1,6 +1,6 @@
 import { MiniApp, retrieveLaunchParams } from '@tma.js/sdk';
 import { NotificationService } from '@tonkeeper/core/dist/AppSdk';
-import { isStandardTonWallet, TonContract, TonWalletStandard } from "@tonkeeper/core/dist/entries/wallet";
+import { StandardTonWalletState } from "@tonkeeper/core/dist/entries/wallet";
 import { APIConfig } from '@tonkeeper/core/dist/entries/apis';
 import {
     toTonProofItem,
@@ -31,7 +31,7 @@ export class TwaNotification implements NotificationService {
 
     private getTonConnectProof = async (
         api: APIConfig,
-        wallet: TonWalletStandard,
+        wallet: StandardTonWalletState,
         signTonConnect: (bufferToSign: Buffer) => Promise<Buffer | Uint8Array>
     ) => {
         const domain = 'https://twa.tonkeeper.com/';
@@ -49,18 +49,13 @@ export class TwaNotification implements NotificationService {
 
     subscribe = async (
         api: APIConfig,
-        wallet: TonContract,
+        wallet: StandardTonWalletState,
         signTonConnect: (bufferToSign: Buffer) => Promise<Buffer | Uint8Array>
     ) => {
         try {
             await this.miniApp.requestWriteAccess();
         } catch (e) {
             console.error(e);
-        }
-
-        // TODO add subscribe to an account without tonproof in backend
-        if (!isStandardTonWallet(wallet)) {
-            throw new Error("Can't subscribe to non standard wallet");
         }
 
         const proof = await this.getTonConnectProof(api, wallet, signTonConnect);

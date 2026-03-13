@@ -16,7 +16,7 @@ import {
     Title
 } from '../NotificationCommon';
 import { ActionData } from './ActivityNotification';
-import { useActiveTonNetwork } from '../../../state/wallet';
+import { useActiveWallet } from '../../../state/wallet';
 
 export const UnSubscribeActionDetails: FC<ActionData> = ({ action, timestamp, event }) => {
     const { t } = useTranslation();
@@ -69,7 +69,7 @@ export const SubscribeActionDetails: FC<ActionData> = ({ action, timestamp, even
 export const UnSubscribeAction: FC<{ action: Action; date: string }> = ({ action, date }) => {
     const { t } = useTranslation();
     const { unSubscribe } = action;
-    const network = useActiveTonNetwork();
+    const wallet = useActiveWallet();
 
     if (!unSubscribe) {
         return <ErrorAction />;
@@ -84,7 +84,7 @@ export const UnSubscribeAction: FC<{ action: Action; date: string }> = ({ action
                 entry="-"
                 address={
                     unSubscribe.beneficiary.name ??
-                    toShortValue(formatAddress(unSubscribe.beneficiary.address, network))
+                    toShortValue(formatAddress(unSubscribe.beneficiary.address, wallet.network))
                 }
                 date={date}
             />
@@ -95,7 +95,7 @@ export const UnSubscribeAction: FC<{ action: Action; date: string }> = ({ action
 export const SubscribeAction: FC<{ action: Action; date: string }> = ({ action, date }) => {
     const { t } = useTranslation();
     const { subscribe } = action;
-    const network = useActiveTonNetwork();
+    const wallet = useActiveWallet();
 
     if (!subscribe) {
         return <ErrorAction />;
@@ -111,7 +111,7 @@ export const SubscribeAction: FC<{ action: Action; date: string }> = ({ action, 
                 entry="-"
                 address={
                     subscribe.beneficiary.name ??
-                    toShortValue(formatAddress(subscribe.beneficiary.address, network))
+                    toShortValue(formatAddress(subscribe.beneficiary.address, wallet.network))
                 }
                 date={date}
             />

@@ -30,17 +30,14 @@ export const useNativeBackButton = (sdk: IAppSdk, onClick: () => void) => {
     }, [sdk, onClick]);
 };
 
-export const BackButtonBlock: FC<{ onClick: () => void; className?: string }> = ({
-    onClick,
-    className
-}) => {
+export const BackButtonBlock: FC<{ onClick: () => void }> = ({ onClick }) => {
     const sdk = useAppSdk();
     useNativeBackButton(sdk, onClick);
     if (sdk.nativeBackButton) {
         return <></>;
     } else {
         return (
-            <BackBlock className={className}>
+            <BackBlock>
                 <RoundedButton onClick={onClick}>
                     <ChevronLeftIcon />
                 </RoundedButton>

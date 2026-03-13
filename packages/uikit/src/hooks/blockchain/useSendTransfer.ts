@@ -20,8 +20,7 @@ import { useTransactionAnalytics } from '../amplitude';
 import { useAppContext } from '../appContext';
 import { useAppSdk } from '../appSdk';
 import { useTranslation } from '../translation';
-import { useActiveAccount, useInvalidateActiveWalletQueries } from '../../state/wallet';
-import { isAccountControllable } from '@tonkeeper/core/dist/entries/account';
+import { useActiveStandardTonWallet } from '../../state/wallet';
 
 export function useSendTransfer<T extends Asset>(
     recipient: T extends TonAsset ? TonRecipientData : TronRecipientData,
@@ -32,26 +31,22 @@ export function useSendTransfer<T extends Asset>(
     const { t } = useTranslation();
     const sdk = useAppSdk();
     const { api } = useAppContext();
-    const account = useActiveAccount();
+    const wallet = useActiveStandardTonWallet();
     const client = useQueryClient();
     const track2 = useTransactionAnalytics();
     const { data: jettons } = useJettonList();
     const { mutateAsync: checkTouchId } = useCheckTouchId();
-    const { mutateAsync: invalidateAccountQueries } = useInvalidateActiveWalletQueries();
 
     return useMutation<boolean, Error>(async () => {
-        const signer = await getSigner(sdk, account.id, checkTouchId).catch(() => null);
+        const signer = await getSigner(sdk, wallet.id, checkTouchId).catch(() => null);
         if (signer === null) return false;
         try {
-            if (!isAccountControllable(account)) {
-                throw new Error("Can't send a transfer using this account");
-            }
             if (isTonAsset(amount.asset)) {
                 if (amount.asset.id === TON_ASSET.id) {
                     track2('send-ton');
                     await sendTonTransfer(
                         api,
-                        account,
+                        wallet,
                         recipient as TonRecipientData,
                         amount,
                         isMax,
@@ -67,7 +62,7 @@ export function useSendTransfer<T extends Asset>(
                     )!;
                     await sendJettonTransfer(
                         api,
-                        account,
+                        wallet,
                         recipient as TonRecipientData,
                         amount as AssetAmount<TonAsset>,
                         jettonInfo!.walletAddress.address,
@@ -93,7 +88,9 @@ export function useSendTransfer<T extends Asset>(
             await notifyError(client, sdk, t, e);
         }
 
-        await invalidateAccountQueries();
+        await client.invalidateQueries({
+            predicate: query => query.queryKey.includes(wallet.id)
+        });
         return true;
     });
 }

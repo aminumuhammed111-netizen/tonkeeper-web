@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { localizationText } from '@tonkeeper/core/dist/entries/language';
-import { getApiConfig } from '@tonkeeper/core/dist/entries/network';
-import { WalletVersion } from '@tonkeeper/core/dist/entries/wallet';
+import { getApiConfig, Network } from '@tonkeeper/core/dist/entries/network';
+import { WalletState, WalletVersion } from '@tonkeeper/core/dist/entries/wallet';
 import { useWindowsScroll } from '@tonkeeper/uikit/dist/components/Body';
 import ConnectLedgerNotification from '@tonkeeper/uikit/dist/components/ConnectLedgerNotification';
 import { CopyNotification } from '@tonkeeper/uikit/dist/components/CopyNotification';
@@ -18,7 +18,7 @@ import { SybHeaderGlobalStyle } from '@tonkeeper/uikit/dist/components/SubHeader
 import { AsideMenu } from '@tonkeeper/uikit/dist/components/desktop/aside/AsideMenu';
 import { PreferencesAsideMenu } from '@tonkeeper/uikit/dist/components/desktop/aside/PreferencesAsideMenu';
 import { WalletAsideMenu } from '@tonkeeper/uikit/dist/components/desktop/aside/WalletAsideMenu';
-import { DesktopWalletHeader } from '@tonkeeper/uikit/dist/components/desktop/header/DesktopWalletHeader';
+import { DesktopHeader } from '@tonkeeper/uikit/dist/components/desktop/header/DesktopHeader';
 import ReceiveNotification from '@tonkeeper/uikit/dist/components/home/ReceiveNotification';
 import NftNotification from '@tonkeeper/uikit/dist/components/nft/NftNotification';
 import {
@@ -32,6 +32,7 @@ import { DesktopCoinPage } from '@tonkeeper/uikit/dist/desktop-pages/coin/Deskto
 import DashboardPage from '@tonkeeper/uikit/dist/desktop-pages/dashboard';
 import { DesktopHistoryPage } from '@tonkeeper/uikit/dist/desktop-pages/history/DesktopHistoryPage';
 import { DesktopMultiSendPage } from '@tonkeeper/uikit/dist/desktop-pages/multi-send';
+import { NotcoinPage } from '@tonkeeper/uikit/dist/desktop-pages/notcoin/NotcoinPage';
 import { DesktopPreferencesRouting } from '@tonkeeper/uikit/dist/desktop-pages/preferences/DesktopPreferencesRouting';
 import { DesktopWalletSettingsRouting } from '@tonkeeper/uikit/dist/desktop-pages/settings/DesktopWalletSettingsRouting';
 import { DesktopSwapPage } from '@tonkeeper/uikit/dist/desktop-pages/swap';
@@ -53,15 +54,15 @@ import { UnlockNotification } from '@tonkeeper/uikit/dist/pages/home/UnlockNotif
 import ImportRouter from '@tonkeeper/uikit/dist/pages/import';
 import Initialize, { InitializeContainer } from '@tonkeeper/uikit/dist/pages/import/Initialize';
 import { UserThemeProvider } from '@tonkeeper/uikit/dist/providers/UserThemeProvider';
-import { useUserFiatQuery } from '@tonkeeper/uikit/dist/state/fiat';
+import { useUserFiat } from '@tonkeeper/uikit/dist/state/fiat';
 import { useCanPromptTouchId } from '@tonkeeper/uikit/dist/state/password';
 import { useProBackupState } from '@tonkeeper/uikit/dist/state/pro';
-import { useTonendpoint, useTonenpointConfig } from '@tonkeeper/uikit/dist/state/tonendpoint';
 import {
-    useActiveAccountQuery,
-    useAccountsStateQuery,
-    useActiveTonNetwork
-} from '@tonkeeper/uikit/dist/state/wallet';
+    isV5R1Enabled,
+    useTonendpoint,
+    useTonenpointConfig
+} from '@tonkeeper/uikit/dist/state/tonendpoint';
+import { useActiveWalletQuery, useWalletsStateQuery } from '@tonkeeper/uikit/dist/state/wallet';
 import { Container, GlobalStyleCss } from '@tonkeeper/uikit/dist/styles/globalStyle';
 import { FC, Suspense, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -84,10 +85,6 @@ import { DesktopCollectables } from '@tonkeeper/uikit/dist/desktop-pages/nft/Des
 import { useUserLanguage } from '@tonkeeper/uikit/dist/state/language';
 import { useDebuggingTools } from '@tonkeeper/uikit/dist/hooks/useDebuggingTools';
 import { useDevSettings } from '@tonkeeper/uikit/dist/state/dev';
-import { ModalsRoot } from '@tonkeeper/uikit/dist/components/ModalsRoot';
-import { Account } from '@tonkeeper/core/dist/entries/account';
-import { DesktopPreferencesHeader } from '@tonkeeper/uikit/dist/components/desktop/header/DesktopPreferencesHeader';
-import { desktopHeaderContainerHeight } from '@tonkeeper/uikit/dist/components/desktop/header/DesktopHeaderElements';
 
 const queryClient = new QueryClient({
     defaultOptions: {
@@ -128,7 +125,7 @@ const GlobalStyle = createGlobalStyle`
 const sdk = new DesktopAppSdk();
 const TARGET_ENV = 'desktop';
 
-const langs = 'en,zh_CN,ru,it,tr,bg';
+const langs = 'en,zh_CN,ru,it,tr';
 
 declare const REACT_APP_TONCONSOLE_API: string;
 declare const REACT_APP_TG_BOT_ID: string;
@@ -221,8 +218,7 @@ const WideLayout = styled.div`
 
 const WideContent = styled.div`
     flex: 1;
-    min-width: 0;
-    min-height: 0;
+    overflow: auto;
 `;
 
 const WalletLayout = styled.div`
@@ -234,7 +230,7 @@ const WalletLayout = styled.div`
 const WalletLayoutBody = styled.div`
     flex: 1;
     display: flex;
-    max-height: calc(100% - ${desktopHeaderContainerHeight});
+    max-height: calc(100% - 69px);
 `;
 
 const WalletRoutingWrapper = styled.div`
@@ -244,9 +240,8 @@ const WalletRoutingWrapper = styled.div`
 `;
 
 const PreferencesLayout = styled.div`
-    height: calc(100% - ${desktopHeaderContainerHeight});
+    height: 100%;
     display: flex;
-    overflow: auto;
 `;
 
 const PreferencesRoutingWrapper = styled.div`
@@ -263,20 +258,19 @@ const FullSizeWrapperBounded = styled(FullSizeWrapper)`
 `;
 
 export const Loader: FC = () => {
-    const network = useActiveTonNetwork();
-    const { data: activeAccount, isLoading: activeWalletLoading } = useActiveAccountQuery();
-    const { data: accounts, isLoading: isWalletsLoading } = useAccountsStateQuery();
+    const { data: activeWallet, isLoading: activeWalletLoading } = useActiveWalletQuery();
+    const { data: wallets, isLoading: isWalletsLoading } = useWalletsStateQuery();
     const { data: lang, isLoading: isLangLoading } = useUserLanguage();
     const { data: devSettings } = useDevSettings();
 
     const lock = useLock(sdk);
     const { i18n } = useTranslation();
-    const { data: fiat } = useUserFiatQuery();
+    const { data: fiat } = useUserFiat();
 
     const tonendpoint = useTonendpoint({
         targetEnv: TARGET_ENV,
         build: sdk.version,
-        network,
+        network: activeWallet?.network,
         lang,
         platform: 'desktop'
     });
@@ -285,7 +279,7 @@ export const Loader: FC = () => {
     const navigate = useNavigate();
     useAppHeight();
 
-    const { data: tracker } = useAnalytics(sdk.version, activeAccount, accounts);
+    const { data: tracker } = useAnalytics(sdk.version, activeWallet, wallets);
 
     useEffect(() => {
         if (lang && i18n.language !== localizationText(lang)) {
@@ -311,6 +305,7 @@ export const Loader: FC = () => {
         return <Loading />;
     }
 
+    const network = activeWallet?.network ?? Network.MAINNET;
     const context: IAppContext = {
         api: getApiConfig(config, network, REACT_APP_TONCONSOLE_API),
         fiat,
@@ -325,7 +320,8 @@ export const Loader: FC = () => {
             tgAuthBotId: REACT_APP_TG_BOT_ID,
             stonfiReferralAddress: REACT_APP_STONFI_REFERRAL_ADDRESS
         },
-        defaultWalletVersion: WalletVersion.V5R1
+        defaultWalletVersion:
+            isV5R1Enabled(config) || devSettings.enableV5 ? WalletVersion.V5R1 : WalletVersion.V4R2
     };
 
     return (
@@ -335,10 +331,9 @@ export const Loader: FC = () => {
                     value={() => navigate(AppRoute.home, { replace: true })}
                 >
                     <AppContext.Provider value={context}>
-                        <Content activeAccount={activeAccount} lock={lock} />
+                        <Content activeWallet={activeWallet} lock={lock} />
                         <CopyNotification hideSimpleCopyNotifications />
                         <QrScanner />
-                        <ModalsRoot />
                     </AppContext.Provider>
                 </AfterImportAction.Provider>
             </OnImportAction.Provider>
@@ -352,9 +347,9 @@ const usePrefetch = () => {
 };
 
 export const Content: FC<{
-    activeAccount?: Account | null;
+    activeWallet?: WalletState | null;
     lock: boolean;
-}> = ({ activeAccount, lock }) => {
+}> = ({ activeWallet, lock }) => {
     const location = useLocation();
     useWindowsScroll();
     useAppWidth();
@@ -370,7 +365,7 @@ export const Content: FC<{
         );
     }
 
-    if (!activeAccount || location.pathname.startsWith(AppRoute.import)) {
+    if (!activeWallet || location.pathname.startsWith(AppRoute.import)) {
         return (
             <FullSizeWrapperBounded className="full-size-wrapper">
                 <InitializeContainer fullHeight={false}>
@@ -403,7 +398,7 @@ export const Content: FC<{
 const WalletContent = () => {
     return (
         <WalletLayout>
-            <DesktopWalletHeader />
+            <DesktopHeader />
 
             <WalletLayoutBody>
                 <WalletAsideMenu />
@@ -424,6 +419,7 @@ const WalletContent = () => {
                                 element={<DesktopWalletSettingsRouting />}
                             />
                             <Route path={AppRoute.swap} element={<DesktopSwapPage />} />
+                            <Route path={AppRoute.notcoin} element={<NotcoinPage />} />
                             <Route path="*" element={<DesktopTokens />} />
                         </Route>
                     </Routes>
@@ -435,15 +431,12 @@ const WalletContent = () => {
 
 const PreferencesContent = () => {
     return (
-        <>
-            <DesktopPreferencesHeader />
-            <PreferencesLayout>
-                <PreferencesAsideMenu />
-                <PreferencesRoutingWrapper className="hide-scrollbar">
-                    <DesktopPreferencesRouting />
-                </PreferencesRoutingWrapper>
-            </PreferencesLayout>
-        </>
+        <PreferencesLayout>
+            <PreferencesAsideMenu />
+            <PreferencesRoutingWrapper className="hide-scrollbar">
+                <DesktopPreferencesRouting />
+            </PreferencesRoutingWrapper>
+        </PreferencesLayout>
     );
 };
 

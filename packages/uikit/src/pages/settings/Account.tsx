@@ -1,3 +1,4 @@
+import { formatAddress, toShortValue } from '@tonkeeper/core/dist/utils/common';
 import { FC, useCallback, useMemo, useState } from 'react';
 import {
     DragDropContext,
@@ -17,16 +18,18 @@ import { SkeletonListPayloadWithImage } from '../../components/Skeleton';
 import { SubHeader } from '../../components/SubHeader';
 import { Label1 } from '../../components/Text';
 import { ImportNotification } from '../../components/create/ImportNotification';
-import { DeleteAccountNotification } from '../../components/settings/DeleteAccountNotification';
+import {
+    DeleteWalletNotification,
+    LogOutWalletNotification
+} from '../../components/settings/LogOutNotification';
 import { SetUpWalletIcon } from '../../components/settings/SettingsIcons';
 import { SettingsList } from '../../components/settings/SettingsList';
 import { RenameWalletNotification } from '../../components/settings/wallet-name/WalletNameNotification';
 import { WalletEmoji } from '../../components/shared/emoji/WalletEmoji';
 import { useTranslation } from '../../hooks/translation';
 import { AppRoute, SettingsRoute } from '../../libs/routes';
-import { useMutateAccountsState, useAccountsState } from '../../state/wallet';
-import { Account as AccountType } from '@tonkeeper/core/dist/entries/account';
-import { useAccountLabel } from '../../hooks/accountUtils';
+import { useMutateWalletsState, useWalletsState } from '../../state/wallet';
+import { isMnemonicAuthWallet, WalletState } from '@tonkeeper/core/dist/entries/wallet';
 
 const Row = styled.div`
     display: flex;
@@ -42,20 +45,21 @@ const Icon = styled.span`
 `;
 
 const WalletRow: FC<{
-    account: AccountType;
+    wallet: WalletState;
     dragHandleProps: DraggableProvidedDragHandleProps | null | undefined;
-}> = ({ account, dragHandleProps }) => {
+}> = ({ wallet, dragHandleProps }) => {
     const navigate = useNavigate();
     const { t } = useTranslation();
 
     const [rename, setRename] = useState<boolean>(false);
+    const [logout, setLogout] = useState<boolean>(false);
     const [remove, setRemove] = useState<boolean>(false);
 
-    const secondary = useAccountLabel(account);
-
-    if (!account) {
+    if (!wallet) {
         return <SkeletonListPayloadWithImage />;
     }
+
+    const address = formatAddress(wallet.rawAddress, wallet.network);
 
     return (
         <>
@@ -64,8 +68,12 @@ const WalletRow: FC<{
                     <Icon {...dragHandleProps}>
                         <ReorderIcon />
                     </Icon>
-                    <WalletEmoji emoji={account.emoji} />
-                    <ColumnText noWrap text={account.name} secondary={secondary} />
+                    <WalletEmoji emoji={wallet.emoji} />
+                    <ColumnText
+                        noWrap
+                        text={wallet.name ? wallet.name : t('wallet_title')}
+                        secondary={toShortValue(address)}
+                    />
                     <DropDown
                         payload={onClose => (
                             <ListBlock margin={false} dropDown>
@@ -80,14 +88,14 @@ const WalletRow: FC<{
                                         <Label1>{t('Rename')}</Label1>
                                     </ListItemPayload>
                                 </ListItem>
-                                {account.type === 'mnemonic' && (
+                                {isMnemonicAuthWallet(wallet) && (
                                     <ListItem
                                         dropDown
                                         onClick={() => {
                                             navigate(
                                                 AppRoute.settings +
                                                     SettingsRoute.recovery +
-                                                    `/${account.id}`
+                                                    `/${wallet.id}`
                                             );
                                         }}
                                     >
@@ -97,6 +105,17 @@ const WalletRow: FC<{
                                     </ListItem>
                                 )}
                                 <Divider />
+                                <ListItem
+                                    dropDown
+                                    onClick={() => {
+                                        setLogout(true);
+                                        onClose();
+                                    }}
+                                >
+                                    <ListItemPayload>
+                                        <Label1>{t('settings_reset')}</Label1>
+                                    </ListItemPayload>
+                                </ListItem>
                                 <ListItem
                                     dropDown
                                     onClick={() => {
@@ -118,11 +137,15 @@ const WalletRow: FC<{
                 </Row>
             </ListItemPayload>
             <RenameWalletNotification
-                account={rename ? account : undefined}
+                wallet={rename ? wallet : undefined}
                 handleClose={() => setRename(false)}
             />
-            <DeleteAccountNotification
-                account={remove ? account : undefined}
+            <LogOutWalletNotification
+                wallet={logout ? wallet : undefined}
+                handleClose={() => setLogout(false)}
+            />
+            <DeleteWalletNotification
+                wallet={remove ? wallet : undefined}
                 handleClose={() => setRemove(false)}
             />
         </>
@@ -133,8 +156,8 @@ export const Account = () => {
     const [isOpen, setOpen] = useState(false);
     const { t } = useTranslation();
 
-    const accounts = useAccountsState();
-    const { mutate } = useMutateAccountsState();
+    const wallets = useWalletsState();
+    const { mutate } = useMutateWalletsState();
 
     const createItems = useMemo(() => {
         return [
@@ -149,12 +172,12 @@ export const Account = () => {
     const handleDrop: OnDragEndResponder = useCallback(
         droppedItem => {
             if (!droppedItem.destination) return;
-            const updatedList = [...accounts];
+            const updatedList = [...wallets];
             const [reorderedItem] = updatedList.splice(droppedItem.source.index, 1);
             updatedList.splice(droppedItem.destination.index, 0, reorderedItem);
             mutate(updatedList);
         },
-        [accounts, mutate]
+        [wallets, mutate]
     );
 
     return (
@@ -165,10 +188,10 @@ export const Account = () => {
                     <Droppable droppableId="wallets">
                         {provided => (
                             <ListBlock {...provided.droppableProps} ref={provided.innerRef}>
-                                {accounts.map((account, index) => (
+                                {wallets.map((wallet, index) => (
                                     <Draggable
-                                        key={account.id}
-                                        draggableId={account.id}
+                                        key={wallet.id}
+                                        draggableId={wallet.id}
                                         index={index}
                                     >
                                         {p => (
@@ -180,7 +203,7 @@ export const Account = () => {
                                             >
                                                 <WalletRow
                                                     dragHandleProps={p.dragHandleProps}
-                                                    account={account}
+                                                    wallet={wallet}
                                                 />
                                             </ListItemElement>
                                         )}

@@ -1,6 +1,6 @@
 import { useAppSdk } from './appSdk';
-import { AccountsState } from '@tonkeeper/core/dist/entries/account';
-import { accountsStorage } from '@tonkeeper/core/dist/service/accountsStorage';
+import { walletsStorage } from '@tonkeeper/core/dist/service/walletsService';
+import { WalletsState } from '@tonkeeper/core/dist/entries/wallet';
 
 export const useDebuggingTools = () => {
     const sdk = useAppSdk();
@@ -18,7 +18,7 @@ export const useDebuggingTools = () => {
                     console.error('ERR: method is not supported');
                     return;
                 }
-                accountsStorage(sdk.storage).setAccounts(null as unknown as AccountsState);
+                walletsStorage(sdk.storage).setWallets(null as unknown as WalletsState);
             }
         };
     }

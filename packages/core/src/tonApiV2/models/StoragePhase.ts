@@ -46,8 +46,6 @@ export interface StoragePhase {
     statusChange: AccStatusChange;
 }
 
-
-
 /**
  * Check if a given object implements the StoragePhase interface.
  */
