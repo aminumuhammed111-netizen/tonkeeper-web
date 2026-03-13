@@ -9,6 +9,7 @@ import { Switch } from '../../components/fields/Switch';
 import { KeyIcon, LockIcon } from '../../components/settings/SettingsIcons';
 import { SettingsItem, SettingsList } from '../../components/settings/SettingsList';
 import { useTranslation } from '../../hooks/translation';
+import { useIsFullWidthMode } from '../../hooks/useIsFullWidthMode';
 import { AppRoute, SettingsRoute } from '../../libs/routes';
 import { useIsActiveWalletKeystone } from '../../state/keystone';
 import { useIsActiveWalletLedger } from '../../state/ledger';
@@ -19,7 +20,7 @@ import {
     useMutateTouchId,
     useTouchIdEnabled
 } from '../../state/password';
-import { useIsPasswordSet } from '../../state/wallet';
+import { useIsActiveWalletWatchOnly, useIsPasswordSet } from '../../state/wallet';
 
 const LockSwitch = () => {
     const { t } = useTranslation();
@@ -104,6 +105,8 @@ const ShowPhrases = () => {
 
     const isLedger = useIsActiveWalletLedger();
     const isKeystone = useIsActiveWalletKeystone();
+    const isReadOnly = useIsActiveWalletWatchOnly();
+    const isFullWidthMode = useIsFullWidthMode();
 
     const items = useMemo(() => {
         const i: SettingsItem[] = [
@@ -116,7 +119,7 @@ const ShowPhrases = () => {
         return i;
     }, []);
 
-    if (isLedger || isKeystone) {
+    if (isLedger || isKeystone || isReadOnly || isFullWidthMode) {
         return <></>;
     }
 

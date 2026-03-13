@@ -1,32 +1,33 @@
 import { IStorage } from '../Storage';
-import { WalletsStorage } from './walletsService';
-import { isPasswordAuthWallet } from '../entries/wallet';
 import { decrypt, encrypt } from './cryptoService';
 import { mnemonicValidate } from '@ton/crypto';
 import { decryptWalletMnemonic } from './mnemonicService';
+import { AccountsStorage } from './accountsStorage';
+import { AuthPassword } from '../entries/password';
+import { AccountTonMnemonic } from '../entries/account';
 
 export class PasswordStorage {
-    private readonly walletStorage: WalletsStorage;
+    private readonly accountsStorage: AccountsStorage;
 
     constructor(storage: IStorage) {
-        this.walletStorage = new WalletsStorage(storage);
+        this.accountsStorage = new AccountsStorage(storage);
     }
 
     async getIsPasswordSet() {
-        const wallets = await this.getPasswordAuthWallets();
+        const wallets = await this.getPasswordAuthAccounts();
         return wallets.length > 0;
     }
 
     async isPasswordValid(password: string): Promise<boolean> {
         try {
-            const walletToCheck = (await this.getPasswordAuthWallets())[0];
-            if (!walletToCheck) {
+            const accToCheck = (await this.getPasswordAuthAccounts())[0];
+            if (!accToCheck) {
                 throw new Error('None wallet has a password auth');
             }
 
-            const mnemonic = (await decrypt(walletToCheck.auth.encryptedMnemonic, password)).split(
-                ' '
-            );
+            const mnemonic = (
+                await decrypt((accToCheck.auth as AuthPassword).encryptedMnemonic, password)
+            ).split(' ');
             return await mnemonicValidate(mnemonic);
         } catch (e) {
             console.error(e);
@@ -42,25 +43,30 @@ export class PasswordStorage {
     }
 
     async updatePassword(oldPassword: string, newPassword: string): Promise<void> {
-        const wallets = await this.getPasswordAuthWallets();
+        const accounts = await this.getPasswordAuthAccounts();
 
-        const updatedWallets = await Promise.all(
-            wallets.map(async wallet => {
-                const mnemonic = await decryptWalletMnemonic(wallet, oldPassword);
-                const newEncrypted = await encrypt(mnemonic.join(' '), newPassword);
-                return {
-                    ...wallet,
-                    auth: { ...wallet.auth, encryptedMnemonic: newEncrypted }
-                };
+        const updatedAccounts = await Promise.all(
+            accounts.map(async acc => {
+                const mnemonic = await decryptWalletMnemonic(
+                    acc as { auth: AuthPassword },
+                    oldPassword
+                );
+                (acc.auth as AuthPassword).encryptedMnemonic = await encrypt(
+                    mnemonic.join(' '),
+                    newPassword
+                );
+                return acc.clone();
             })
         );
 
-        await this.walletStorage.updateWalletsInState(updatedWallets);
+        await this.accountsStorage.updateAccountsInState(updatedAccounts);
     }
 
-    private async getPasswordAuthWallets() {
-        const wallets = await this.walletStorage.getWallets();
-        return wallets.filter(isPasswordAuthWallet);
+    private async getPasswordAuthAccounts(): Promise<AccountTonMnemonic[]> {
+        const accounts = await this.accountsStorage.getAccounts();
+        return accounts.filter(
+            a => a.type === 'mnemonic' && a.auth.kind === 'password'
+        ) as AccountTonMnemonic[];
     }
 }
 

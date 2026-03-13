@@ -1,25 +1,24 @@
 import {
-    StandardTonWalletState,
+    backwardCompatibilityOnlyWalletVersions,
     WalletVersion as WalletVersionType,
     WalletVersions,
     walletVersionText
 } from '@tonkeeper/core/dist/entries/wallet';
 import { formatAddress, toShortValue } from '@tonkeeper/core/dist/utils/common';
-import React, { FC, useState } from 'react';
+import { AccountId, AccountVersionEditable } from '@tonkeeper/core/dist/entries/account';
+import React, { FC } from 'react';
 import styled from 'styled-components';
 import { InnerBody } from '../../components/Body';
 import { SubHeader } from '../../components/SubHeader';
 import { Body2, Label1 } from '../../components/Text';
 import { useTranslation } from '../../hooks/translation';
-import { useIsActiveWalletKeystone } from '../../state/keystone';
-import { useIsActiveWalletLedger } from '../../state/ledger';
 import {
-    useActiveStandardTonWallet,
-    useCreateStandardTonWalletsByMnemonic,
-    useMutateActiveWallet,
-    useMutateRenameWallet,
     useStandardTonWalletVersions,
-    useWalletsState
+    useActiveAccount,
+    useMutateActiveTonWallet,
+    useRemoveTonWalletVersionFromAccount,
+    useAddTonWalletVersionToAccount,
+    useAccountState
 } from '../../state/wallet';
 import { ListBlock, ListItem, ListItemPayload } from '../../components/List';
 import { toFormattedTonBalance } from '../../hooks/balance';
@@ -27,11 +26,6 @@ import { Button } from '../../components/fields/Button';
 import { Address } from '@ton/core';
 import { useNavigate } from 'react-router-dom';
 import { AppRoute } from '../../libs/routes';
-import { Notification } from '../../components/Notification';
-import { UpdateWalletName } from '../../components/create/WalletName';
-import { useCheckTouchId } from '../../state/password';
-import { getMnemonicAndPassword } from '../../state/mnemonic';
-import { useAppSdk } from '../../hooks/appSdk';
 import { SkeletonList } from '../../components/Skeleton';
 
 const LedgerError = styled(Body2)`
@@ -49,149 +43,156 @@ const Body2Secondary = styled(Body2)`
     color: ${props => props.theme.textSecondary};
 `;
 
-export const WalletVersion = () => {
+const ButtonsContainer = styled.div`
+    display: flex;
+    gap: 8px;
+`;
+
+export const WalletVersionPage = () => {
     const { t } = useTranslation();
-    const sdk = useAppSdk();
-    const isLedger = useIsActiveWalletLedger();
-    const isKeystone = useIsActiveWalletKeystone();
-    const currentWallet = useActiveStandardTonWallet();
-    const connectedWallets = useWalletsState();
-    const { mutateAsync: selectWallet, isLoading: isSelectWalletLoading } = useMutateActiveWallet();
-    const navigate = useNavigate();
-    const { mutateAsync: checkTouchId } = useCheckTouchId();
-
-    const { data: wallets } = useStandardTonWalletVersions(
-        currentWallet.publicKey,
-        currentWallet.network
-    );
-
-    const { mutateAsync: createWalletAsync, isLoading: isCreateWalletLoading } =
-        useCreateStandardTonWalletsByMnemonic();
-    const { mutateAsync: renameWallet, isLoading: isRenameWalletLoading } = useMutateRenameWallet();
-
-    const onOpenWallet = async (address: Address) => {
-        if (address.toRawString() !== currentWallet.rawAddress) {
-            await selectWallet(address.toRawString());
-        }
-        navigate(AppRoute.home);
-    };
-
-    const [editWalletNameNotificationPayload, setEditWalletNameNotificationPayload] = useState<
-        StandardTonWalletState | undefined
-    >();
-
-    const onAddWallet = async (w: { version: WalletVersionType; address: Address }) => {
-        const { mnemonic, password } = await getMnemonicAndPassword(
-            sdk,
-            currentWallet.id,
-            checkTouchId
-        );
-        const newWallet = await createWalletAsync({
-            mnemonic,
-            versions: [w.version],
-            password
-        });
-        if (!newWallet) {
-            return;
-        }
-        setEditWalletNameNotificationPayload(newWallet[0]);
-    };
-
-    const onChangeName = async (args: { name: string; emoji: string; id: string }) => {
-        await renameWallet(args);
-        setEditWalletNameNotificationPayload(undefined);
-    };
-
-    if (!wallets) {
-        return (
-            <>
-                <SubHeader title={t('settings_wallet_version')} />
-                <InnerBody>
-                    <SkeletonList size={WalletVersions.length} />
-                </InnerBody>
-            </>
-        );
-    }
-
-    const isLoading = isSelectWalletLoading || isCreateWalletLoading || isRenameWalletLoading;
-
     return (
         <>
             <SubHeader title={t('settings_wallet_version')} />
             <InnerBody>
-                {!isLedger && !isKeystone && (
-                    <ListBlock>
-                        {wallets.map(wallet => {
-                            const isWalletAdded = connectedWallets.some(
-                                w => w.rawAddress === wallet.address.toRawString()
-                            );
-
-                            return (
-                                <ListItem hover={false} key={wallet.address.toRawString()}>
-                                    <ListItemPayload>
-                                        <TextContainer>
-                                            <Label1>{walletVersionText(wallet.version)}</Label1>
-                                            <Body2Secondary>
-                                                {toShortValue(formatAddress(wallet.address))}
-                                                &nbsp;·&nbsp;
-                                                {toFormattedTonBalance(wallet.tonBalance)}&nbsp;TON
-                                                {wallet.hasJettons &&
-                                                    t('wallet_version_and_tokens')}
-                                            </Body2Secondary>
-                                        </TextContainer>
-                                        {isWalletAdded ? (
-                                            <Button
-                                                onClick={() => onOpenWallet(wallet.address)}
-                                                loading={isLoading}
-                                            >
-                                                {t('open')}
-                                            </Button>
-                                        ) : (
-                                            <Button
-                                                primary
-                                                onClick={() => onAddWallet(wallet)}
-                                                loading={isLoading}
-                                            >
-                                                {t('add')}
-                                            </Button>
-                                        )}
-                                    </ListItemPayload>
-                                </ListItem>
-                            );
-                        })}
-                    </ListBlock>
-                )}
-                {isLedger && <LedgerError>{t('ledger_operation_not_supported')}</LedgerError>}
-                {isKeystone && <LedgerError>{t('operation_not_supported')}</LedgerError>}
+                <WalletVersionPageContent />
             </InnerBody>
-            <UpdateWalletNameNotification
-                wallet={editWalletNameNotificationPayload}
-                isOpen={!!editWalletNameNotificationPayload}
-                onClose={onChangeName}
-            />
         </>
     );
 };
 
-const UpdateWalletNameNotification: FC<{
-    isOpen: boolean;
-    onClose: (isAdded: { name: string; emoji: string; id: string }) => void;
-    wallet: StandardTonWalletState | undefined;
-}> = ({ isOpen, onClose, wallet }) => {
+export const WalletVersionPageContent: FC<{
+    afterWalletOpened?: () => void;
+    accountId?: AccountId;
+}> = ({ afterWalletOpened, accountId }) => {
+    const { t } = useTranslation();
+    const activeAccount = useActiveAccount();
+    const passedAccount = useAccountState(accountId);
+    const selectedAccount = passedAccount ?? activeAccount;
+
+    if (selectedAccount.type === 'ledger') {
+        return <LedgerError>{t('ledger_operation_not_supported')}</LedgerError>;
+    }
+
+    if (selectedAccount.type === 'keystone' || selectedAccount.type === 'watch-only') {
+        return <LedgerError>{t('operation_not_supported')}</LedgerError>;
+    }
+
     return (
-        <Notification
-            isOpen={isOpen}
-            handleClose={() =>
-                onClose({ name: wallet!.name, emoji: wallet!.emoji, id: wallet!.id })
-            }
-        >
-            {() => (
-                <UpdateWalletName
-                    name={wallet?.name || ''}
-                    submitHandler={val => onClose({ ...val, id: wallet!.id })}
-                    walletEmoji={wallet?.emoji || ''}
-                />
-            )}
-        </Notification>
+        <WalletVersionPageContentInternal
+            afterWalletOpened={afterWalletOpened}
+            account={selectedAccount}
+        />
+    );
+};
+
+export const WalletVersionPageContentInternal: FC<{
+    afterWalletOpened?: () => void;
+    account: AccountVersionEditable;
+}> = ({ afterWalletOpened, account }) => {
+    const { t } = useTranslation();
+    const activeAccount = useActiveAccount();
+    const appActiveWallet = activeAccount.activeTonWallet;
+    const selectedWallet = account.activeTonWallet;
+    const currentAccountWalletsVersions = account.allTonWallets;
+
+    const { mutateAsync: selectWallet, isLoading: isSelectWalletLoading } =
+        useMutateActiveTonWallet();
+    const navigate = useNavigate();
+
+    const { data: wallets } = useStandardTonWalletVersions(selectedWallet.publicKey);
+
+    const { mutate: createWallet, isLoading: isCreateWalletLoading } =
+        useAddTonWalletVersionToAccount();
+
+    const { mutate: hideWallet, isLoading: isHideWalletLoading } =
+        useRemoveTonWalletVersionFromAccount();
+
+    const onOpenWallet = async (address: Address) => {
+        if (address.toRawString() !== appActiveWallet.rawAddress) {
+            await selectWallet(address.toRawString());
+        }
+        navigate(AppRoute.home);
+        afterWalletOpened?.();
+    };
+
+    const onAddWallet = async (w: { version: WalletVersionType; address: Address }) => {
+        createWallet({
+            accountId: account.id,
+            version: w.version
+        });
+    };
+
+    const onHideWallet = async (w: { address: Address }) => {
+        hideWallet({
+            accountId: account.id,
+            walletId: w.address.toRawString()
+        });
+    };
+
+    if (!wallets) {
+        return <SkeletonList size={WalletVersions.length} />;
+    }
+
+    const isLoading = isSelectWalletLoading || isCreateWalletLoading || isHideWalletLoading;
+    const canHide = currentAccountWalletsVersions.length > 1;
+
+    const walletsToShow = wallets.filter(
+        w =>
+            !backwardCompatibilityOnlyWalletVersions.includes(w.version) ||
+            currentAccountWalletsVersions.some(item => item.version === w.version) ||
+            w.tonBalance ||
+            w.hasJettons
+    );
+
+    return (
+        <ListBlock>
+            {walletsToShow.map(wallet => {
+                const isWalletAdded = currentAccountWalletsVersions.some(
+                    w => w.rawAddress === wallet.address.toRawString()
+                );
+
+                return (
+                    <ListItem hover={false} key={wallet.address.toRawString()}>
+                        <ListItemPayload>
+                            <TextContainer>
+                                <Label1>{walletVersionText(wallet.version)}</Label1>
+                                <Body2Secondary>
+                                    {toShortValue(formatAddress(wallet.address)) + ' '}·
+                                    {' ' + toFormattedTonBalance(wallet.tonBalance)}
+                                    &nbsp;TON
+                                    {wallet.hasJettons && t('wallet_version_and_tokens')}
+                                </Body2Secondary>
+                            </TextContainer>
+                            {isWalletAdded ? (
+                                <ButtonsContainer>
+                                    <Button
+                                        onClick={() => onOpenWallet(wallet.address)}
+                                        loading={isLoading}
+                                    >
+                                        {t('open')}
+                                    </Button>
+                                    {canHide && (
+                                        <Button
+                                            onClick={() => onHideWallet(wallet)}
+                                            loading={isLoading}
+                                        >
+                                            {t('hide')}
+                                        </Button>
+                                    )}
+                                </ButtonsContainer>
+                            ) : (
+                                <Button
+                                    primary
+                                    onClick={() => onAddWallet(wallet)}
+                                    loading={isLoading}
+                                >
+                                    {t('add')}
+                                </Button>
+                            )}
+                        </ListItemPayload>
+                    </ListItem>
+                );
+            })}
+        </ListBlock>
     );
 };

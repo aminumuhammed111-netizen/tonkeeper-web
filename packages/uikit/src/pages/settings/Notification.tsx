@@ -10,14 +10,15 @@ import { useTranslation } from '../../hooks/translation';
 import { QueryKey } from '../../libs/queryKey';
 import { signTonConnectOver } from '../../state/mnemonic';
 import { useCheckTouchId } from '../../state/password';
-import { useActiveStandardTonWallet, useActiveWallet } from '../../state/wallet';
+import { useActiveAccount, useActiveTonNetwork, useActiveWallet } from '../../state/wallet';
 import { useAppContext } from '../../hooks/appContext';
 
 const useSubscribed = () => {
     const sdk = useAppSdk();
     const wallet = useActiveWallet();
+    const network = useActiveTonNetwork();
 
-    return useQuery<boolean, Error>([wallet.id, wallet.network, QueryKey.subscribed], async () => {
+    return useQuery<boolean, Error>([wallet.id, network, QueryKey.subscribed], async () => {
         const { notifications } = sdk;
         if (!notifications) {
             throw new Error('Missing notifications');
@@ -29,12 +30,14 @@ const useSubscribed = () => {
 const useToggleSubscribe = () => {
     const { t } = useTranslation();
     const sdk = useAppSdk();
-    const wallet = useActiveStandardTonWallet();
+    const account = useActiveAccount();
     const client = useQueryClient();
     const { mutateAsync: checkTouchId } = useCheckTouchId();
     const { api } = useAppContext();
+    const network = useActiveTonNetwork();
 
     return useMutation<void, Error, boolean>(async checked => {
+        const wallet = account.activeTonWallet;
         const { notifications } = sdk;
         if (!notifications) {
             throw new Error('Missing notifications');
@@ -44,7 +47,7 @@ const useToggleSubscribe = () => {
                 await notifications.subscribe(
                     api,
                     wallet,
-                    signTonConnectOver(sdk, wallet.publicKey, t, checkTouchId)
+                    signTonConnectOver(sdk, account.id, t, checkTouchId)
                 );
             } catch (e) {
                 if (e instanceof Error) sdk.topMessage(e.message);
@@ -59,7 +62,7 @@ const useToggleSubscribe = () => {
             }
         }
 
-        await client.invalidateQueries([wallet.id, wallet.network, QueryKey.subscribed]);
+        await client.invalidateQueries([wallet.id, network, QueryKey.subscribed]);
     });
 };
 

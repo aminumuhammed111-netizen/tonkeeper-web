@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { localizationText } from '@tonkeeper/core/dist/entries/language';
-import { Network, getApiConfig } from '@tonkeeper/core/dist/entries/network';
-import { WalletState, WalletVersion } from "@tonkeeper/core/dist/entries/wallet";
+import { getApiConfig } from '@tonkeeper/core/dist/entries/network';
+import { WalletVersion } from "@tonkeeper/core/dist/entries/wallet";
 import { InnerBody, useWindowsScroll } from '@tonkeeper/uikit/dist/components/Body';
 import { CopyNotification } from '@tonkeeper/uikit/dist/components/CopyNotification';
 import { Footer, FooterGlobalStyle } from '@tonkeeper/uikit/dist/components/Footer';
@@ -37,9 +37,9 @@ import { UnlockNotification } from '@tonkeeper/uikit/dist/pages/home/UnlockNotif
 import Initialize, { InitializeContainer } from '@tonkeeper/uikit/dist/pages/import/Initialize';
 import { useKeyboardHeight } from '@tonkeeper/uikit/dist/pages/import/hooks';
 import { UserThemeProvider } from '@tonkeeper/uikit/dist/providers/UserThemeProvider';
-import { useUserFiat } from '@tonkeeper/uikit/dist/state/fiat';
-import { isV5R1Enabled, useTonendpoint, useTonenpointConfig } from "@tonkeeper/uikit/dist/state/tonendpoint";
-import { useActiveWalletQuery, useWalletsStateQuery } from "@tonkeeper/uikit/dist/state/wallet";
+import { useUserFiatQuery } from "@tonkeeper/uikit/dist/state/fiat";
+import { useTonendpoint, useTonenpointConfig } from "@tonkeeper/uikit/dist/state/tonendpoint";
+import { useActiveAccountQuery, useAccountsStateQuery, useActiveTonNetwork } from "@tonkeeper/uikit/dist/state/wallet";
 import { Container, GlobalStyle } from '@tonkeeper/uikit/dist/styles/globalStyle';
 import React, { FC, PropsWithChildren, Suspense, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -49,6 +49,9 @@ import { BrowserAppSdk } from './libs/appSdk';
 import { useAnalytics, useAppHeight, useAppWidth } from './libs/hooks';
 import { useUserLanguage } from "@tonkeeper/uikit/dist/state/language";
 import { useDevSettings } from "@tonkeeper/uikit/dist/state/dev";
+import { ModalsRoot } from "@tonkeeper/uikit/dist/components/ModalsRoot";
+import { Account } from "@tonkeeper/core/dist/entries/account";
+import { useDebuggingTools } from "@tonkeeper/uikit/dist/hooks/useDebuggingTools";
 
 const ImportRouter = React.lazy(() => import('@tonkeeper/uikit/dist/pages/import'));
 const Settings = React.lazy(() => import('@tonkeeper/uikit/dist/pages/settings'));
@@ -178,10 +181,11 @@ const Wrapper = styled(FullSizeWrapper)<{ standalone: boolean }>`
 `;
 
 export const Loader: FC = () => {
-    const { data: activeWallet, isLoading: activeWalletLoading } = useActiveWalletQuery();
-    const { data: wallets, isLoading: isWalletsLoading } = useWalletsStateQuery();
+    const network = useActiveTonNetwork();
+    const { data: activeAccount, isLoading: activeWalletLoading } = useActiveAccountQuery();
+    const { data: accounts, isLoading: isWalletsLoading } = useAccountsStateQuery();
     const { data: lang, isLoading: isLangLoading } = useUserLanguage();
-    const { data: fiat } = useUserFiat();
+    const { data: fiat } = useUserFiatQuery();
     const { data: devSettings } = useDevSettings();
 
     const [ios, standalone] = useMemo(() => {
@@ -194,7 +198,7 @@ export const Loader: FC = () => {
     const tonendpoint = useTonendpoint({
           targetEnv: TARGET_ENV,
           build: sdk.version,
-          network: activeWallet?.network,
+          network,
           lang
     });
     const { data: config } = useTonenpointConfig(tonendpoint);
@@ -202,11 +206,11 @@ export const Loader: FC = () => {
     const navigate = useNavigate();
     useAppHeight();
 
-    const { data: tracker } = useAnalytics(activeWallet || undefined, wallets, sdk.version);
+    const { data: tracker } = useAnalytics(activeAccount || undefined, accounts, sdk.version);
 
     useEffect(() => {
         if (
-            activeWallet &&
+            activeAccount &&
             lang &&
             i18n.language !== localizationText(lang)
         ) {
@@ -214,7 +218,7 @@ export const Loader: FC = () => {
                 i18n.changeLanguage(localizationText(lang))
             );
         }
-    }, [activeWallet, i18n]);
+    }, [activeAccount, i18n]);
 
     if (
         isWalletsLoading ||
@@ -228,7 +232,6 @@ export const Loader: FC = () => {
         return <Loading />;
     }
 
-    const network = activeWallet?.network ?? Network.MAINNET;
     const context: IAppContext = {
         api: getApiConfig(config, network),
         fiat,
@@ -238,7 +241,7 @@ export const Loader: FC = () => {
         extension: false,
         proFeatures: false,
         ios,
-        defaultWalletVersion: (isV5R1Enabled(config) || devSettings.enableV5) ? WalletVersion.V5R1 : WalletVersion.V4R2
+        defaultWalletVersion: WalletVersion.V5R1
     };
 
     return (
@@ -248,11 +251,12 @@ export const Loader: FC = () => {
                     value={() => navigate(AppRoute.home, { replace: true })}
                 >
                     <AppContext.Provider value={context}>
-                        <Content activeWallet={activeWallet} lock={lock} standalone={standalone} />
+                        <Content activeAccount={activeAccount} lock={lock} standalone={standalone} />
                         <CopyNotification hideSimpleCopyNotifications={!standalone} />
                         <Suspense fallback={<></>}>
                             <QrScanner />
                         </Suspense>
+                        <ModalsRoot />
                     </AppContext.Provider>
                 </AfterImportAction.Provider>
             </OnImportAction.Provider>
@@ -261,15 +265,16 @@ export const Loader: FC = () => {
 };
 
 export const Content: FC<{
-    activeWallet?: WalletState | null;
+    activeAccount?: Account | null;
     lock: boolean;
     standalone: boolean;
-}> = ({ activeWallet, lock, standalone }) => {
+}> = ({ activeAccount, lock, standalone }) => {
     const location = useLocation();
     useWindowsScroll();
     useAppWidth(standalone);
     useKeyboardHeight();
     useTrackLocation();
+    useDebuggingTools();
 
     if (lock) {
         return (
@@ -298,7 +303,7 @@ export const Content: FC<{
         );
     }
 
-    if (!activeWallet || location.pathname.startsWith(AppRoute.import)) {
+    if (!activeAccount || location.pathname.startsWith(AppRoute.import)) {
         return (
             <FullSizeWrapper standalone={false}>
                 <Suspense fallback={<Loading />}>

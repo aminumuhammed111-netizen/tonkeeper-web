@@ -1,54 +1,61 @@
-import { isStandardTonWallet, walletVersionText } from '@tonkeeper/core/dist/entries/wallet';
+import { walletVersionText } from '@tonkeeper/core/dist/entries/wallet';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '../../hooks/appContext';
 import { useTranslation } from '../../hooks/translation';
-import { SettingsRoute, relative, WalletSettingsRoute } from '../../libs/routes';
+import { SettingsRoute, WalletSettingsRoute, relative } from '../../libs/routes';
 import { useJettonList } from '../../state/jetton';
-import { LogOutWalletNotification } from './LogOutNotification';
+import { useWalletNftList } from '../../state/nft';
+import { useAccountsState, useActiveAccount } from '../../state/wallet';
+import { DeleteAccountNotification } from './DeleteAccountNotification';
 import {
     AppsIcon,
     ListOfTokensIcon,
     LogOutIcon,
+    RecoveryPhraseIcon,
     SaleBadgeIcon,
     SecurityIcon,
     SettingsProIcon,
     WalletsIcon
 } from './SettingsIcons';
 import { SettingsItem, SettingsList } from './SettingsList';
-import { useActiveWallet, useWalletsState } from "../../state/wallet";
-import { useWalletNftList } from "../../state/nft";
+import {
+    isAccountControllable,
+    isAccountVersionEditable
+} from '@tonkeeper/core/dist/entries/account';
 
 const SingleAccountSettings = () => {
-    const [logout, setLogout] = useState(false);
     const { t } = useTranslation();
     const navigate = useNavigate();
-    const wallet = useActiveWallet();
+    const account = useActiveAccount();
     const { data: jettons } = useJettonList();
     const { data: nft } = useWalletNftList();
     const { proFeatures } = useAppContext();
     const mainItems = useMemo<SettingsItem[]>(() => {
-        const items: SettingsItem[] = [
-            // {
-            //   name: t('Subscriptions'),
-            //   icon: <SubscriptionIcon />,
-            //   action: () => navigate(relative(SettingsRoute.subscriptions)),
-            // },
-        ];
+        const items: SettingsItem[] = [];
 
-        /*        if (wallet.auth == null) {
+        if (account.type === 'mnemonic') {
             items.push({
                 name: t('settings_recovery_phrase'),
                 icon: <RecoveryPhraseIcon />,
                 action: () => navigate(relative(SettingsRoute.recovery))
             });
-        }*/
+        }
 
-        if (isStandardTonWallet(wallet)) {
+        if (account.type === 'mnemonic' || account.type === 'ton-only') {
             items.push({
                 name: t('settings_wallet_version'),
-                icon: walletVersionText(wallet.version),
+                icon: walletVersionText(account.activeTonWallet.version),
                 action: () => navigate(relative(SettingsRoute.version))
+            });
+        }
+
+        // check available derivations length to filter and keep only non-legacy added ledger accounts
+        if (account.type === 'ledger' && account.allAvailableDerivations.length > 1) {
+            items.push({
+                name: t('settings_ledger_indexes'),
+                icon: `# ${account.activeDerivationIndex + 1}`,
+                action: () => navigate(relative(SettingsRoute.ledgerIndexes))
             });
         }
 
@@ -81,27 +88,20 @@ const SingleAccountSettings = () => {
             icon: <SecurityIcon />,
             action: () => navigate(relative(SettingsRoute.security))
         });
-        items.push({
-            name: t('settings_connected_apps'),
-            icon: <AppsIcon />,
-            action: () => navigate(relative(WalletSettingsRoute.connectedApps))
-        });
-        items.push({
-            name: t('settings_reset'),
-            icon: <LogOutIcon />,
-            action: () => setLogout(true)
-        });
+        if (isAccountControllable(account)) {
+            items.push({
+                name: t('settings_connected_apps'),
+                icon: <AppsIcon />,
+                action: () => navigate(relative(WalletSettingsRoute.connectedApps))
+            });
+        }
 
         return items;
-    }, [t, navigate, wallet, jettons, nft]);
+    }, [t, navigate, account, jettons, nft]);
 
     return (
         <>
             <SettingsList items={mainItems} />
-            <LogOutWalletNotification
-                wallet={logout ? wallet : undefined}
-                handleClose={() => setLogout(false)}
-            />
         </>
     );
 };
@@ -109,11 +109,15 @@ const SingleAccountSettings = () => {
 const MultipleAccountSettings = () => {
     const { t } = useTranslation();
     const navigate = useNavigate();
-    const wallet = useActiveWallet();
 
     const { data: jettons } = useJettonList();
     const { data: nft } = useWalletNftList();
     const { proFeatures } = useAppContext();
+    const account = useActiveAccount();
+
+    const [deleteAccount, setDeleteAccount] = useState(false);
+
+    const wallet = account.activeTonWallet;
 
     const accountItems = useMemo(() => {
         const items: SettingsItem[] = [
@@ -143,19 +147,28 @@ const MultipleAccountSettings = () => {
     const mainItems = useMemo<SettingsItem[]>(() => {
         const items: SettingsItem[] = [];
 
-        /*if (wallet.auth == null) {
+        if (account.type === 'mnemonic') {
             items.push({
                 name: t('settings_recovery_phrase'),
                 icon: <RecoveryPhraseIcon />,
                 action: () => navigate(relative(SettingsRoute.recovery))
             });
-        }*/
+        }
 
-        if (isStandardTonWallet(wallet)) {
+        if (isAccountVersionEditable(account)) {
             items.push({
                 name: t('settings_wallet_version'),
-                icon: walletVersionText(wallet.version),
+                icon: walletVersionText(account.activeTonWallet.version),
                 action: () => navigate(relative(SettingsRoute.version))
+            });
+        }
+
+        // check available derivations length to filter and keep only non-legacy added ledger accounts
+        if (account.type === 'ledger' && account.allAvailableDerivations.length > 1) {
+            items.push({
+                name: t('settings_ledger_indexes'),
+                icon: `# ${account.activeDerivationIndex + 1}`,
+                action: () => navigate(relative(SettingsRoute.ledgerIndexes))
             });
         }
 
@@ -180,26 +193,37 @@ const MultipleAccountSettings = () => {
             icon: <SecurityIcon />,
             action: () => navigate(relative(SettingsRoute.security))
         });
+        if (isAccountControllable(account)) {
+            items.push({
+                name: t('settings_connected_apps'),
+                icon: <AppsIcon />,
+                action: () => navigate(relative(WalletSettingsRoute.connectedApps))
+            });
+        }
         items.push({
-            name: t('settings_connected_apps'),
-            icon: <AppsIcon />,
-            action: () => navigate(relative(WalletSettingsRoute.connectedApps))
+            name: t('Delete_wallet_data'),
+            icon: <LogOutIcon />,
+            action: () => setDeleteAccount(true)
         });
         return items;
-    }, [t, navigate, wallet, jettons, nft]);
+    }, [t, navigate, wallet, account, jettons, nft]);
 
     return (
         <>
             <SettingsList items={accountItems} />
             <SettingsList items={mainItems} />
+            <DeleteAccountNotification
+                account={deleteAccount ? account : undefined}
+                handleClose={() => setDeleteAccount(false)}
+            />
         </>
     );
 };
 
 export const AccountSettings = () => {
-    const wallets = useWalletsState();
+    const accounts = useAccountsState();
 
-    if (wallets.length > 1) {
+    if (accounts.length > 1) {
         return <MultipleAccountSettings />;
     } else {
         return <SingleAccountSettings />;

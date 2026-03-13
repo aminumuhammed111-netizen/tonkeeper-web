@@ -17,7 +17,7 @@ import {
 import { TonTransactionNotification } from './TonTransactionNotification';
 import { SendTransactionAppRequest, useResponseSendMutation } from './connectHook';
 
-import { useActiveWallet, useMutateActiveWallet } from '../../state/wallet';
+import { useActiveWallet, useMutateActiveTonWallet } from '../../state/wallet';
 
 const useUnSupportMethodMutation = () => {
     return useMutation<void, Error, TonConnectAppRequest>(replyBadRequestResponse);
@@ -36,7 +36,7 @@ const TonConnectSubscription = () => {
     const { mutateAsync: responseSendAsync } = useResponseSendMutation();
 
     useSendNotificationAnalytics(request?.connection?.manifest);
-    const { mutateAsync: setActiveWallet } = useMutateActiveWallet();
+    const { mutateAsync: setActiveWallet } = useMutateActiveTonWallet();
 
     useEffect(() => {
         const handleMessage = (params: TonConnectAppRequest) => {
@@ -60,7 +60,7 @@ const TonConnectSubscription = () => {
                     );
 
                     if (walletToActivate) {
-                        setActiveWallet(walletToActivate.wallet.publicKey).then(() =>
+                        setActiveWallet(walletToActivate.wallet.rawAddress).then(() =>
                             setTimeout(() => {
                                 setRequest(value);
                             }, 100)

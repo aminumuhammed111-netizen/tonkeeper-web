@@ -9,7 +9,7 @@ import {
 } from '@tonkeeper/core/dist/entries/wallet';
 import { formatAddress, toShortValue } from '@tonkeeper/core/dist/utils/common';
 import React, { FC, useEffect, useLayoutEffect, useState } from 'react';
-import { useStandardTonWalletVersions } from '../../state/wallet';
+import { useAccountState, useStandardTonWalletVersions } from '../../state/wallet';
 import { SkeletonList } from '../Skeleton';
 import { toFormattedTonBalance } from '../../hooks/balance';
 import { Checkbox } from '../fields/Checkbox';
@@ -18,6 +18,7 @@ import { mnemonicToWalletKey } from '@ton/crypto';
 import { ChevronLeftIcon } from '../Icon';
 import { RoundedButton } from '../fields/RoundedButton';
 import { useAppContext } from '../../hooks/appContext';
+import { isAccountControllable } from '@tonkeeper/core/dist/entries/account';
 
 const Wrapper = styled.div`
     flex: 1;
@@ -76,6 +77,7 @@ export const ChoseWalletVersions: FC<{
     const [publicKey, setPublicKey] = useState<string | undefined>(undefined);
     const { data: wallets } = useStandardTonWalletVersions(publicKey);
     const [checkedVersions, setCheckedVersions] = useState<WalletVersion[]>([]);
+    const accountState = useAccountState(publicKey);
 
     useEffect(() => {
         mnemonicToWalletKey(mnemonic).then(keypair =>
@@ -85,6 +87,10 @@ export const ChoseWalletVersions: FC<{
 
     useLayoutEffect(() => {
         if (wallets) {
+            if (accountState && isAccountControllable(accountState)) {
+                return setCheckedVersions(accountState.allTonWallets.map(w => w.version));
+            }
+
             const versionsToCheck = wallets
                 .filter(w => w.tonBalance || w.hasJettons)
                 .map(w => w.version);
@@ -93,7 +99,7 @@ export const ChoseWalletVersions: FC<{
             }
             setCheckedVersions(versionsToCheck);
         }
-    }, [wallets]);
+    }, [wallets, accountState]);
 
     const toggleVersion = (version: WalletVersion, isChecked: boolean) => {
         setCheckedVersions(state =>

@@ -1,13 +1,12 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Address } from '@ton/core';
 import { DashboardCell } from '@tonkeeper/core/dist/entries/dashboard';
-import { Network } from '@tonkeeper/core/dist/entries/network';
-import { WalletState } from '@tonkeeper/core/dist/entries/wallet';
+import { TonContract } from '@tonkeeper/core/dist/entries/wallet';
 import { getDashboardData } from '@tonkeeper/core/dist/service/proService';
 import { useAppContext } from '../../hooks/appContext';
 import { useTranslation } from '../../hooks/translation';
 import { QueryKey } from '../../libs/queryKey';
-import { useWalletsState } from '../wallet';
+import { useAccountsState } from '../wallet';
 import { ClientColumns, useDashboardColumnsAsForm } from './useDashboardColumns';
 import { formatAddress } from '@tonkeeper/core/dist/utils/common';
 
@@ -22,8 +21,10 @@ export function useDashboardData() {
     const selectedColIds = selectedColumns?.map(c => c.id);
     const client = useQueryClient();
 
-    const walletsState = useWalletsState();
-    const mainnetWallets = walletsState.filter(w => w && w.network !== Network.TESTNET);
+    const accountsState = useAccountsState();
+    const mainnetWallets = accountsState.flatMap(a =>
+        a.allTonWallets.map(item => ({ ...item, account: a }))
+    );
     const idsMainnet = mainnetWallets.map(w => w!.id);
 
     return useQuery<DashboardCell[][]>(
@@ -59,11 +60,20 @@ export function useDashboardData() {
                     query.columns.forEach((col, colIndex) => {
                         const ClientColumnName = ClientColumns.find(c => c.id === 'name')!;
                         if (col === ClientColumnName.id) {
-                            result[rowIndex][colIndex] = {
-                                columnId: ClientColumnName.id,
-                                type: 'string',
-                                value: wallet?.name || defaultWalletName
-                            };
+                            if (wallet) {
+                                result[rowIndex][colIndex] = {
+                                    columnId: ClientColumnName.id,
+                                    type: 'account_name',
+                                    account: wallet!.account,
+                                    walletId: wallet!.rawAddress
+                                };
+                            } else {
+                                result[rowIndex][colIndex] = {
+                                    columnId: ClientColumnName.id,
+                                    type: 'string',
+                                    value: defaultWalletName
+                                };
+                            }
                             return;
                         }
 
@@ -88,7 +98,7 @@ export function useDashboardData() {
 
             /* cache */
             if (pastQueries?.length) {
-                const walletsToQuerySet = new Set<WalletState>();
+                const walletsToQuerySet = new Set<TonContract>();
                 const columnsToQuerySet = new Set<string>();
 
                 const result: (DashboardCell | null)[][] = idsMainnet.map(() => []);

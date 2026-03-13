@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { localizationFrom } from '@tonkeeper/core/dist/entries/language';
-import { Network, getApiConfig } from '@tonkeeper/core/dist/entries/network';
-import { WalletState, WalletVersion } from "@tonkeeper/core/dist/entries/wallet";
+import { getApiConfig } from '@tonkeeper/core/dist/entries/network';
+import { WalletVersion } from "@tonkeeper/core/dist/entries/wallet";
 import { InnerBody, useWindowsScroll } from '@tonkeeper/uikit/dist/components/Body';
 import { CopyNotification } from '@tonkeeper/uikit/dist/components/CopyNotification';
 import { Footer, FooterGlobalStyle } from '@tonkeeper/uikit/dist/components/Footer';
@@ -39,9 +39,9 @@ import { Unlock } from '@tonkeeper/uikit/dist/pages/home/Unlock';
 import { UnlockNotification } from '@tonkeeper/uikit/dist/pages/home/UnlockNotification';
 import Initialize, { InitializeContainer } from '@tonkeeper/uikit/dist/pages/import/Initialize';
 import { UserThemeProvider } from '@tonkeeper/uikit/dist/providers/UserThemeProvider';
-import { useUserFiat } from '@tonkeeper/uikit/dist/state/fiat';
-import { isV5R1Enabled, useTonendpoint, useTonenpointConfig } from "@tonkeeper/uikit/dist/state/tonendpoint";
-import { useActiveWalletQuery, useWalletsStateQuery } from "@tonkeeper/uikit/dist/state/wallet";
+import { useUserFiatQuery } from "@tonkeeper/uikit/dist/state/fiat";
+import { useTonendpoint, useTonenpointConfig } from "@tonkeeper/uikit/dist/state/tonendpoint";
+import { useActiveAccountQuery, useAccountsStateQuery, useActiveTonNetwork } from "@tonkeeper/uikit/dist/state/wallet";
 import { Container, GlobalStyle } from '@tonkeeper/uikit/dist/styles/globalStyle';
 import React, { FC, PropsWithChildren, Suspense, useEffect, useMemo } from 'react';
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
@@ -54,6 +54,9 @@ import { ExtensionAppSdk } from './libs/appSdk';
 import { useAnalytics, useAppWidth } from './libs/hooks';
 import { useMutateUserLanguage } from "@tonkeeper/uikit/dist/state/language";
 import { useDevSettings } from "@tonkeeper/uikit/dist/state/dev";
+import { ModalsRoot } from "@tonkeeper/uikit/dist/components/ModalsRoot";
+import { Account } from "@tonkeeper/core/dist/entries/account";
+import { useDebuggingTools } from "@tonkeeper/uikit/dist/hooks/useDebuggingTools";
 
 const ImportRouter = React.lazy(() => import('@tonkeeper/uikit/dist/pages/import'));
 const Settings = React.lazy(() => import('@tonkeeper/uikit/dist/pages/settings'));
@@ -174,11 +177,12 @@ const Wrapper = styled(FullSizeWrapper)<{
 `;
 
 export const Loader: FC = React.memo(() => {
-    const { data: activeWallet, isLoading: activeWalletLoading } = useActiveWalletQuery();
-    const { data: wallets, isLoading: isWalletsLoading } = useWalletsStateQuery();
-    const { data: fiat } = useUserFiat();
+    const { data: activeAccount, isLoading: activeWalletLoading } = useActiveAccountQuery();
+    const { data: accounts, isLoading: isWalletsLoading } = useAccountsStateQuery();
+    const { data: fiat } = useUserFiatQuery();
     const { mutate: setLang } = useMutateUserLanguage();
     const { data: devSettings } = useDevSettings();
+    const network = useActiveTonNetwork();
 
     useEffect(() => {
         setLang(localizationFrom(browser.i18n.getUILanguage()))
@@ -188,12 +192,12 @@ export const Loader: FC = React.memo(() => {
     const tonendpoint = useTonendpoint({
         targetEnv: TARGET_ENV,
         build: sdk.version,
-        network: activeWallet?.network,
+        network,
         lang: localizationFrom(browser.i18n.getUILanguage())
     });
     const { data: config } = useTonenpointConfig(tonendpoint);
 
-    const { data: tracker } = useAnalytics(sdk.storage, activeWallet || undefined, wallets, sdk.version);
+    const { data: tracker } = useAnalytics(sdk.storage, activeAccount || undefined, accounts, sdk.version);
 
     if (activeWalletLoading || isWalletsLoading || !config || lock === undefined || fiat === undefined || !devSettings) {
         return (
@@ -202,8 +206,6 @@ export const Loader: FC = React.memo(() => {
             </FullSizeWrapper>
         );
     }
-
-    const network = activeWallet?.network ?? Network.MAINNET;
 
     const context: IAppContext = {
         api: getApiConfig(config, network),
@@ -216,7 +218,7 @@ export const Loader: FC = React.memo(() => {
         proFeatures: false,
         hideQrScanner: true,
         hideSigner: true,
-        defaultWalletVersion: (isV5R1Enabled(config) || devSettings.enableV5) ? WalletVersion.V5R1 : WalletVersion.V4R2
+        defaultWalletVersion: WalletVersion.V5R1
     };
 
     return (
@@ -224,11 +226,12 @@ export const Loader: FC = React.memo(() => {
             <OnImportAction.Provider value={sdk.openExtensionInBrowser}>
                 <AfterImportAction.Provider value={sdk.closeExtensionInBrowser}>
                     <AppContext.Provider value={context}>
-                        <Content activeWallet={activeWallet} lock={lock} />
+                        <Content activeAccount={activeAccount} lock={lock} />
                         <CopyNotification />
                         <Suspense fallback={<></>}>
                             <QrScanner />
                         </Suspense>
+                        <ModalsRoot />
                     </AppContext.Provider>
                 </AfterImportAction.Provider>
             </OnImportAction.Provider>
@@ -249,16 +252,17 @@ const InitialRedirect: FC<PropsWithChildren> = ({ children }) => {
 };
 
 export const Content: FC<{
-    activeWallet?: WalletState | null;
+    activeAccount?: Account | null;
     lock: boolean;
-}> = ({ activeWallet, lock }) => {
+}> = ({ activeAccount, lock }) => {
     const location = useLocation();
 
-    const pageView = !activeWallet || location.pathname.startsWith(AppRoute.import);
+    const pageView = !activeAccount || location.pathname.startsWith(AppRoute.import);
 
     useWindowsScroll(!pageView);
     useAppWidth();
     useTrackLocation();
+    useDebuggingTools();
 
     if (lock) {
         return (

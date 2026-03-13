@@ -5,44 +5,65 @@ import { mnemonicToPrivateKey } from '@ton/crypto';
 import { WalletContractV4 } from '@ton/ton/dist/wallets/WalletContractV4';
 import queryString from 'query-string';
 import { IStorage } from '../Storage';
+import {
+    AccountKeystone,
+    AccountLedger,
+    AccountTonMnemonic,
+    AccountTonOnly,
+    AccountTonWatchOnly
+} from '../entries/account';
 import { APIConfig } from '../entries/apis';
 import { Network } from '../entries/network';
 import { AuthKeychain, AuthPassword } from '../entries/password';
-import {
-    StandardTonWalletState,
-    TonWalletState,
-    WalletId,
-    WalletState,
-    WalletVersion,
-    WalletVersions
-} from '../entries/wallet';
+import { WalletVersion, WalletVersions, sortWalletsByVersion } from '../entries/wallet';
 import { WalletApi } from '../tonApiV2';
-import { walletContract } from './wallet/contractService';
-import { BLOCKCHAIN_NAME } from '../entries/crypto';
-import { walletsStorage } from './walletsService';
 import { emojis } from '../utils/emojis';
-import { formatAddress } from '../utils/common';
+import { accountsStorage } from './accountsStorage';
+import { walletContract } from './wallet/contractService';
 
-export const createStandardTonWalletStateByMnemonic = async (
+export const createReadOnlyTonAccountByAddress = async (
+    storage: IStorage,
+    address: string,
+    options: {
+        name?: string;
+    }
+) => {
+    const rawAddress = Address.parse(address).toRawString();
+    const { name, emoji } = await accountsStorage(storage).getNewAccountNameAndEmoji(
+        rawAddress.split(':')[1]
+    );
+
+    return new AccountTonWatchOnly(rawAddress, options.name ?? name, emoji, {
+        id: rawAddress,
+        rawAddress: rawAddress
+    });
+};
+
+export const createStandardTonAccountByMnemonic = async (
     appContext: { api: APIConfig; defaultWalletVersion: WalletVersion },
+    storage: IStorage,
     mnemonic: string[],
     options: {
-        version?: WalletVersion;
+        versions?: WalletVersion[];
         network?: Network;
         auth: AuthPassword | Omit<AuthKeychain, 'keychainStoreKey'>;
-        name?: string;
     }
 ) => {
     const keyPair = await mnemonicToPrivateKey(mnemonic);
 
     const publicKey = keyPair.publicKey.toString('hex');
 
-    const address = await findWalletAddress(
-        appContext,
-        publicKey,
-        options.version,
-        options.network
-    );
+    let tonWallets: { rawAddress: string; version: WalletVersion }[] = [];
+    if (options.versions) {
+        tonWallets = options.versions
+            .map(v => getWalletAddress(publicKey, v))
+            .map(i => ({
+                rawAddress: i.address.toRawString(),
+                version: i.version
+            }));
+    } else {
+        tonWallets = [await findWalletAddress(appContext, publicKey)];
+    }
 
     let walletAuth: AuthPassword | AuthKeychain;
     if (options.auth.kind === 'keychain') {
@@ -54,20 +75,23 @@ export const createStandardTonWalletStateByMnemonic = async (
         walletAuth = options.auth;
     }
 
-    const state: TonWalletState = {
-        blockchain: BLOCKCHAIN_NAME.TON,
-        id: address.rawAddress,
-        type: 'standard',
-        publicKey,
-        rawAddress: address.rawAddress,
-        version: address.version,
-        name: options.name || getFallbackWalletName(Address.parse(address.rawAddress)),
-        emoji: getFallbackWalletEmoji(publicKey),
-        auth: walletAuth,
-        network: Network.MAINNET
-    };
+    const { name, emoji } = await accountsStorage(storage).getNewAccountNameAndEmoji(publicKey);
 
-    return state;
+    const walletIdToActivate = tonWallets.slice().sort(sortWalletsByVersion)[0].rawAddress;
+
+    return new AccountTonMnemonic(
+        publicKey,
+        name,
+        emoji,
+        walletAuth,
+        walletIdToActivate,
+        tonWallets.map(w => ({
+            id: w.rawAddress,
+            publicKey,
+            version: w.version,
+            rawAddress: w.rawAddress
+        }))
+    );
 };
 
 const versionMap: Record<string, WalletVersion> = {
@@ -92,18 +116,8 @@ const findWalletVersion = (interfaces?: string[]): WalletVersion => {
 
 const findWalletAddress = async (
     appContext: { api: APIConfig; defaultWalletVersion: WalletVersion },
-    publicKey: string,
-    version?: WalletVersion,
-    network?: Network
+    publicKey: string
 ): Promise<{ rawAddress: string; version: WalletVersion }> => {
-    if (version !== undefined) {
-        const parsed = getWalletAddress(publicKey, version, network);
-        return {
-            rawAddress: parsed.address.toRawString(),
-            version
-        };
-    }
-
     try {
         const result = await new WalletApi(appContext.api.tonApiV2).getWalletsByPublicKey({
             publicKey: publicKey
@@ -167,23 +181,11 @@ export const getWalletsAddresses = (
     ) as Record<(typeof WalletVersions)[number], { address: Address; version: WalletVersion }>;
 };
 
-export const updateWalletProperty = async (
-    storage: IStorage,
-    walletId: WalletId,
-    props: Partial<Pick<TonWalletState, 'name' | 'network' | 'emoji'>>
-) => {
-    const wallet = (await walletsStorage(storage).getWallet(walletId))!;
-    const updated: WalletState = {
-        ...wallet,
-        ...props
-    };
-    await walletsStorage(storage).updateWalletInState(updated);
-};
-
-export const walletStateFromSignerQr = async (
+export const accountBySignerQr = async (
     appContext: { api: APIConfig; defaultWalletVersion: WalletVersion },
+    storage: IStorage,
     qrCode: string
-): Promise<StandardTonWalletState> => {
+): Promise<AccountTonOnly> => {
     if (!qrCode.startsWith('tonkeeper://signer')) {
         throw new Error('Unexpected QR code');
     }
@@ -201,66 +203,93 @@ export const walletStateFromSignerQr = async (
 
     const publicKey = pk;
 
+    // TODO support multiple wallets versions configuration
     const active = await findWalletAddress(appContext, publicKey);
 
-    return {
-        type: 'standard',
-        blockchain: BLOCKCHAIN_NAME.TON,
-        id: active.rawAddress,
-        network: Network.MAINNET,
-        version: active.version,
-        rawAddress: active.rawAddress,
+    const { name: fallbackName, emoji } = await accountsStorage(storage).getNewAccountNameAndEmoji(
+        publicKey
+    );
+
+    return new AccountTonOnly(
         publicKey,
-        name: name || getFallbackWalletName(Address.parse(active.rawAddress)),
-        auth: { kind: 'signer' },
-        emoji: getFallbackWalletEmoji(publicKey)
-    };
+        name || fallbackName,
+        emoji,
+        { kind: 'signer' },
+        active.rawAddress,
+        [
+            {
+                id: active.rawAddress,
+                publicKey,
+                version: active.version,
+                rawAddress: active.rawAddress
+            }
+        ]
+    );
 };
 
-export const walletStateFromSignerDeepLink = async (
+export const accountBySignerDeepLink = async (
     appContext: { api: APIConfig; defaultWalletVersion: WalletVersion },
+    storage: IStorage,
     publicKey: string,
     name: string | null
-): Promise<WalletState> => {
+): Promise<AccountTonOnly> => {
     const active = await findWalletAddress(appContext, publicKey);
 
-    return {
+    const { name: fallbackName, emoji } = await accountsStorage(storage).getNewAccountNameAndEmoji(
+        publicKey
+    );
+
+    return new AccountTonOnly(
         publicKey,
-        rawAddress: active.rawAddress,
-        version: active.version,
-        type: 'standard',
-        blockchain: BLOCKCHAIN_NAME.TON,
-        id: active.rawAddress,
-        network: Network.MAINNET,
-        name: name || getFallbackWalletName(Address.parse(active.rawAddress)),
-        auth: { kind: 'signer-deeplink' },
-        emoji: getFallbackWalletEmoji(publicKey)
-    };
+        name || fallbackName,
+        emoji,
+        { kind: 'signer-deeplink' },
+        active.rawAddress,
+        [
+            {
+                id: active.rawAddress,
+                publicKey,
+                version: active.version,
+                rawAddress: active.rawAddress
+            }
+        ]
+    );
 };
 
-export const walletStateFromLedger = (walletInfo: {
-    address: string;
-    publicKey: Buffer;
-    accountIndex: number;
-}): StandardTonWalletState => {
-    const address = Address.parse(walletInfo.address);
-    const publicKey = walletInfo.publicKey.toString('hex');
-
-    return {
-        network: Network.MAINNET,
-        blockchain: BLOCKCHAIN_NAME.TON,
-        type: 'standard',
-        publicKey,
-        id: address.toRawString(),
-        rawAddress: address.toRawString(),
-        version: WalletVersion.V4R2,
-        name: `Ledger ${walletInfo.accountIndex + 1}`,
-        auth: { kind: 'ledger', accountIndex: walletInfo.accountIndex },
-        emoji: getFallbackWalletEmoji(publicKey)
-    };
+export const accountByLedger = (
+    accountId: string,
+    walletsIndexesToAdd: number[],
+    walletsInfo: {
+        address: string;
+        publicKey: Buffer;
+        accountIndex: number;
+        version: WalletVersion;
+    }[],
+    name: string,
+    emoji: string
+): AccountLedger => {
+    return new AccountLedger(
+        accountId,
+        name,
+        emoji,
+        walletsIndexesToAdd[0],
+        walletsIndexesToAdd,
+        walletsInfo.map(item => ({
+            index: item.accountIndex,
+            activeTonWalletId: item.address,
+            tonWallets: [
+                {
+                    id: item.address,
+                    publicKey: item.publicKey.toString('hex'),
+                    version: item.version,
+                    rawAddress: item.address
+                }
+            ]
+        }))
+    );
 };
 
-export const walletStateFromKeystone = (ur: UR) => {
+export const accountByKeystone = async (ur: UR, storage: IStorage): Promise<AccountKeystone> => {
     const account = parseTonAccount(ur);
     const contact = WalletContractV4.create({
         workchain: 0,
@@ -270,27 +299,19 @@ export const walletStateFromKeystone = (ur: UR) => {
     const pathInfo =
         account.path && account.xfp ? { path: account.path, mfp: account.xfp } : undefined;
 
-    const state: StandardTonWalletState = {
-        publicKey: account.publicKey,
-        rawAddress: contact.address.toRawString(),
-        version: WalletVersion.V4R2,
-        type: 'standard',
-        blockchain: BLOCKCHAIN_NAME.TON,
-        id: contact.address.toRawString(),
-        network: Network.MAINNET,
-        name: account.name ?? 'Keystone',
-        auth: { kind: 'keystone', info: pathInfo },
-        emoji: getFallbackWalletEmoji(account.publicKey)
-    };
+    const { name: fallbackName, emoji } = await accountsStorage(storage).getNewAccountNameAndEmoji(
+        account.publicKey
+    );
 
-    return state;
+    return new AccountKeystone(account.publicKey, account.name || fallbackName, emoji, pathInfo, {
+        id: contact.address.toRawString(),
+        publicKey: account.publicKey,
+        version: WalletVersion.V4R2,
+        rawAddress: contact.address.toRawString()
+    });
 };
 
-export function getFallbackWalletEmoji(publicKey: string) {
+export function getFallbackAccountEmoji(publicKey: string) {
     const index = Number('0x' + publicKey.slice(-6)) % emojis.length;
     return emojis[index];
-}
-
-export function getFallbackWalletName(address: Address) {
-    return 'Wallet ' + formatAddress(address).slice(-4);
 }
