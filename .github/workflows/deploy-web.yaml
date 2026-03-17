@@ -1,5 +1,5 @@
-name: Tonkeeper Web Deploy
-on:
+name:trx
+on:tron
     workflow_dispatch:
         inputs:
             environment:
